@@ -24,8 +24,8 @@ const defaultDoc = () => ({
       type: 'text',
       x: 420,
       y: 240,
-      text: '输入或从下方输入区写入',
-      label: '文本1',
+      text: 'Nhập tại đây hoặc viết từ ô nhập phía dưới',
+      label: 'Văn bản 1',
     },
   ],
   links: [],
@@ -176,11 +176,13 @@ export default function Canvas() {
       }
     };
     const onUp = () => { dragRef.current = null; };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, [view.z]);
 
@@ -214,8 +216,8 @@ export default function Canvas() {
       type,
       x: Math.round(center.x - NODE_W / 2 + (Math.random() * 40 - 20)),
       y: Math.round(center.y - NODE_H / 2 + (Math.random() * 40 - 20)),
-      text: type === 'text' ? '双击输入或从下方输入区写入' : '',
-      label: type === 'text' ? '文本' : type === 'image' ? '图片' : '视频',
+      text: type === 'text' ? 'Nhấp đúp để nhập hoặc viết từ ô nhập phía dưới' : '',
+      label: type === 'text' ? 'Văn bản' : type === 'image' ? 'Hình ảnh' : 'Video',
     };
     setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
     setSelected([n.id]);
@@ -245,8 +247,8 @@ export default function Canvas() {
 
   /* ---------------- 生成 ---------------- */
   const generate = async () => {
-    if (prompt.trim().length < 2) return toast('请先输入文本内容', 'error');
-    if ((user?.credits ?? 0) < 10 + 2 * duration) return toast('积分不足', 'error');
+    if (prompt.trim().length < 2) return toast('Hãy nhập nội dung văn bản trước', 'error');
+    if ((user?.credits ?? 0) < 10 + 2 * duration) return toast('Không đủ điểm', 'error');
 
     const bound = selected.length === 1 ? doc.nodes.find((n) => n.id === selected[0]) : null;
     setBusy(true);
@@ -264,7 +266,7 @@ export default function Canvas() {
         x: bound ? bound.x + NODE_W + 60 : 520,
         y: bound ? bound.y : 300,
         text: prompt.trim(),
-        label: '视频',
+        label: 'Video',
         jobId: job.id,
         status: 'running',
         mediaUrl: null,
@@ -276,7 +278,7 @@ export default function Canvas() {
       }));
       setSelected([node.id]);
       setPrompt('');
-      toast('节点已提交生成', 'ok');
+      toast('Đã gửi nút để tạo', 'ok');
       refresh();
     } catch (e) {
       toast(e.message, 'error');
@@ -336,14 +338,14 @@ export default function Canvas() {
       <div className="flex shrink-0 items-center justify-between gap-4 px-7 pb-3 pt-5">
         <div>
           <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-white">
-            无限画布
+            Canvas vô hạn
             <span className="h-2 w-2 rounded-full bg-brand-400 shadow-[0_0_8px_rgba(79,227,193,.8)]" />
           </h1>
-          <p className="mt-1 text-[12.5px] text-mist-400">在无限画布中自由组织创意与生成视频</p>
+          <p className="mt-1 text-[12.5px] text-mist-400">Tự do sắp xếp ý tưởng và tạo video trên canvas vô hạn</p>
         </div>
         <span className="flex items-center gap-1.5 text-[11.5px] text-mist-400">
           <span className={clsx('h-1.5 w-1.5 rounded-full', saved ? 'bg-brand-400' : 'bg-mist-400')} />
-          {saved ? '已自动保存' : '保存中…'}
+          {saved ? 'Đã tự động lưu' : 'Đang lưu…'}
         </span>
       </div>
 
@@ -354,9 +356,9 @@ export default function Canvas() {
           ref={viewportRef}
           data-canvasbg="1"
           onWheel={onWheel}
-          onMouseDown={onBackgroundDown}
+          onPointerDown={onBackgroundDown}
           onContextMenu={(e) => e.preventDefault()}
-          className={clsx('dot-grid absolute inset-0 select-none', tool === 'hand' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default')}
+          className={clsx('dot-grid absolute inset-0 touch-none select-none', tool === 'hand' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default')}
           style={{
             backgroundSize: `${22 * view.z}px ${22 * view.z}px`,
             backgroundPosition: `${view.x}px ${view.y}px`,
@@ -394,9 +396,9 @@ export default function Canvas() {
                 key={n.id}
                 node={n}
                 active={selected.includes(n.id)}
-                onMouseDown={(e) => onNodeDown(e, n)}
+                onPointerDown={(e) => onNodeDown(e, n)}
                 onDoubleClick={() => {
-                  const t = window.prompt('节点文本', n.text || '');
+                  const t = window.prompt('Văn bản của nút', n.text || '');
                   if (t != null) setDoc((d) => ({ ...d, nodes: d.nodes.map((x) => x.id === n.id ? { ...x, text: t } : x) }));
                 }}
               />
@@ -406,29 +408,29 @@ export default function Canvas() {
 
         {/* 顶部工具栏 */}
         <div className="absolute left-4 top-4 z-20 flex items-center gap-1 rounded-2xl border border-white/[0.07] bg-[#121726]/90 p-1.5 shadow-xl backdrop-blur">
-          <ToolBtn icon={MousePointer2} active={tool === 'select'} onClick={() => setTool('select')} title="选择 (V)" />
-          <ToolBtn icon={Hand} active={tool === 'hand'} onClick={() => setTool('hand')} title="抓手 (H)" />
+          <ToolBtn icon={MousePointer2} active={tool === 'select'} onClick={() => setTool('select')} title="Chọn (V)" />
+          <ToolBtn icon={Hand} active={tool === 'hand'} onClick={() => setTool('hand')} title="Bàn tay (H)" />
           <Sep />
-          <ToolBtn icon={Type} onClick={() => addNode('text')} title="新建文本节点" />
-          <ToolBtn icon={ImageIcon} onClick={() => addNode('image')} title="新建图片节点" />
-          <ToolBtn icon={Video} onClick={() => addNode('video')} title="新建视频节点" />
+          <ToolBtn icon={Type} onClick={() => addNode('text')} title="Nút văn bản mới" />
+          <ToolBtn icon={ImageIcon} onClick={() => addNode('image')} title="Nút hình ảnh mới" />
+          <ToolBtn icon={Video} onClick={() => addNode('video')} title="Nút video mới" />
           <Sep />
-          <ToolBtn icon={ZoomOut} onClick={() => zoomBy(1 / 1.15)} title="缩小" />
+          <ToolBtn icon={ZoomOut} onClick={() => zoomBy(1 / 1.15)} title="Thu nhỏ" />
           <button
             onClick={() => setView((v) => ({ ...v, z: 1 }))}
-            title="重置为 100%"
+            title="Đặt lại 100%"
             className="flex h-9 min-w-[70px] items-center justify-center gap-1 rounded-xl border border-white/[0.06] px-2 font-mono text-[12px] text-mist-200 hover:text-white"
           >
             {Math.round(view.z * 100)}% <ChevronDown size={12} className="text-mist-400" />
           </button>
-          <ToolBtn icon={ZoomIn} onClick={() => zoomBy(1.15)} title="放大" />
+          <ToolBtn icon={ZoomIn} onClick={() => zoomBy(1.15)} title="Phóng to" />
           <Sep />
-          <ToolBtn icon={Maximize} onClick={fitView} title="适应画布" />
-          <ToolBtn icon={Trash2} onClick={removeSelected} disabled={!selected.length} danger title="删除选中 (Delete)" />
+          <ToolBtn icon={Maximize} onClick={fitView} title="Vừa với canvas" />
+          <ToolBtn icon={Trash2} onClick={removeSelected} disabled={!selected.length} danger title="Xóa mục đã chọn (Delete)" />
         </div>
 
         <span className="pointer-events-none absolute right-4 top-5 z-20 hidden font-mono text-[10px] text-mist-400/70 xl:block">
-          滚轮缩放 · 中键/空格/抓手 拖动 · Shift 多选 · 双击编辑
+          Lăn chuột để thu phóng · Kéo bằng nút giữa/phím cách/bàn tay · Shift để chọn nhiều · Nhấp đúp để sửa
         </span>
 
         {/* 小地图 */}
@@ -439,34 +441,34 @@ export default function Canvas() {
           <div className="mb-2 flex items-center justify-center gap-2">
             <span className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-[#121726]/90 px-3 py-1 text-[11px] text-mist-300 backdrop-blur">
               <span className={clsx('h-1.5 w-1.5 rounded-full', boundNode ? 'bg-brand-400' : 'bg-mist-400')} />
-              {boundNode ? `已绑定：${boundNode.label}（生成结果会连到它右侧）` : '未绑定节点 · 结果放在画布中央'}
+              {boundNode ? `Đã liên kết: ${boundNode.label} (kết quả tạo sẽ nối vào bên phải của nó)` : 'Chưa liên kết nút · Kết quả sẽ đặt ở giữa canvas'}
             </span>
             {boundNode && (
               <button onClick={() => setSelected([])} className="flex items-center gap-0.5 text-[11px] text-mist-400 hover:text-mist-200">
-                解除 <X size={10} />
+                Hủy liên kết <X size={10} />
               </button>
             )}
           </div>
           <div className="flex items-center gap-2 rounded-2xl border border-brand-400/30 bg-[#121726]/95 p-2 shadow-[0_0_0_1px_rgba(79,227,193,.08),0_20px_50px_-20px_rgba(0,0,0,.9),0_0_40px_-18px_rgba(79,227,193,.5)] backdrop-blur-xl">
             <button
               onClick={() => addNode('image')}
-              title="添加图片节点"
+              title="Thêm nút hình ảnh"
               className="flex h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-[12.5px] text-mist-200 transition hover:bg-white/5 hover:text-white"
             >
-              <ImagePlus size={16} /> 添加图片
+              <ImagePlus size={16} /> Thêm hình ảnh
             </button>
             <input
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }}
-              placeholder="描述你想要生成的视频内容…"
+              placeholder="Mô tả nội dung video bạn muốn tạo…"
               className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.06] bg-[#0d111c] px-3.5 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
             />
             <select
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value))}
               className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
-              title="时长"
+              title="Thời lượng"
             >
               {[5, 8, 10].map((d) => <option key={d} value={d}>{d}s</option>)}
             </select>
@@ -474,7 +476,7 @@ export default function Canvas() {
               value={size}
               onChange={(e) => setSize(e.target.value)}
               className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
-              title="比例"
+              title="Tỉ lệ"
             >
               {['16:9', '9:16', '1:1'].map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
@@ -484,7 +486,7 @@ export default function Canvas() {
               className="mint-btn flex h-11 shrink-0 items-center gap-2 rounded-xl px-5 text-[14px] font-semibold"
             >
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              生成
+              Tạo
             </button>
           </div>
         </div>
@@ -539,7 +541,7 @@ function Minimap({ nodes, view, vp }) {
     <div className="absolute bottom-5 right-5 z-20 hidden rounded-2xl border border-white/[0.07] bg-[#121726]/90 p-2.5 shadow-xl backdrop-blur md:block">
       <div className="mb-2 flex items-center justify-between px-0.5">
         <span className="flex items-center gap-1.5 text-[11.5px] text-mist-200">
-          <MapIcon size={12} className="text-mist-400" /> 小地图
+          <MapIcon size={12} className="text-mist-400" /> Bản đồ nhỏ
         </span>
         <Expand size={11} className="text-mist-400" />
       </div>
@@ -560,21 +562,21 @@ function Minimap({ nodes, view, vp }) {
   );
 }
 
-function CanvasNode({ node, active, onMouseDown, onDoubleClick }) {
+function CanvasNode({ node, active, onPointerDown, onDoubleClick }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
   const Icon = isText ? Type : node.type === 'image' ? ImageIcon : Video;
-  const title = isText ? '文本提示词' : node.type === 'image' ? '图片' : '视频预览';
-  const role = isText ? '输入' : '输出';
+  const title = isText ? 'Câu lệnh văn bản' : node.type === 'image' ? 'Hình ảnh' : 'Xem trước video';
+  const role = isText ? 'Đầu vào' : 'Đầu ra';
   const fileName = node.mediaUrl ? decodeURIComponent(node.mediaUrl.split('/').pop().split('?')[0]) : null;
 
   return (
     <div
-      onMouseDown={onMouseDown}
+      onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
       style={{ left: node.x, top: node.y, width: NODE_W }}
-      className={clsx('glass-node absolute cursor-grab p-3.5 active:cursor-grabbing', active && 'is-active')}
+      className={clsx('glass-node absolute touch-none cursor-grab p-3.5 active:cursor-grabbing', active && 'is-active')}
     >
       {/* 连接点 */}
       {['-left-[7px]', '-right-[7px]'].map((pos) => (
@@ -598,7 +600,7 @@ function CanvasNode({ node, active, onMouseDown, onDoubleClick }) {
 
       {isText ? (
         <p className="line-clamp-4 min-h-[76px] rounded-xl border border-white/[0.06] bg-[#0d111c]/80 px-3 py-2.5 text-[12px] leading-relaxed text-mist-200">
-          {node.text || '空文本，双击编辑'}
+          {node.text || 'Văn bản trống, nhấp đúp để sửa'}
         </p>
       ) : (
         <div className="relative overflow-hidden rounded-xl bg-black/40">
@@ -615,9 +617,9 @@ function CanvasNode({ node, active, onMouseDown, onDoubleClick }) {
                   <Loader2 size={14} className="animate-spin" /> {node.progress || 0}%
                 </div>
               ) : failed ? (
-                <span className="text-[11.5px] text-rose-400">生成失败</span>
+                <span className="text-[11.5px] text-rose-400">Tạo thất bại</span>
               ) : (
-                <span className="text-[11.5px] text-mist-400">待生成</span>
+                <span className="text-[11.5px] text-mist-400">Chờ tạo</span>
               )}
             </div>
           )}
@@ -634,7 +636,7 @@ function CanvasNode({ node, active, onMouseDown, onDoubleClick }) {
             <span className="truncate text-mist-200" title={node.text}>{fileName || node.text || node.label}</span>
             <span className={clsx('flex shrink-0 items-center gap-1', failed ? 'text-rose-300' : running ? 'text-mist-300' : node.mediaUrl ? 'text-brand-300' : 'text-mist-400')}>
               <span className={clsx('h-1.5 w-1.5 rounded-full', failed ? 'bg-rose-400' : running ? 'bg-amber-400' : node.mediaUrl ? 'bg-brand-400' : 'bg-mist-400')} />
-              {failed ? '失败' : running ? '生成中' : node.mediaUrl ? '生成完成' : '空'}
+              {failed ? 'Thất bại' : running ? 'Đang tạo' : node.mediaUrl ? 'Đã tạo xong' : 'Trống'}
             </span>
           </>
         )}
