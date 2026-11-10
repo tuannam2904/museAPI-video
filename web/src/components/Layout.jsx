@@ -5,9 +5,9 @@ import { useAuth } from '../store/auth.jsx';
 
 /** 侧栏只保留三个入口：快捷创作 / 无限画布 / muse 导入 */
 const NAV = [
-  { to: '/create', label: '快捷创作', icon: Sparkles },
-  { to: '/canvas', label: '无限画布', icon: Workflow },
-  { to: '/accounts', label: 'muse导入', icon: KeyRound },
+  { to: '/create', label: 'Tạo nhanh', icon: Sparkles },
+  { to: '/canvas', label: 'Canvas vô hạn', icon: Workflow },
+  { to: '/accounts', label: 'Nhập Muse', icon: KeyRound },
 ];
 
 export default function Layout() {
@@ -35,14 +35,14 @@ export default function Layout() {
 
         <div className="mt-auto flex flex-col items-center gap-2">
           <span
-            title={`${user?.name || '未命名'} · ${user?.email || ''}`}
+            title={`${user?.name || 'Chưa đặt tên'} · ${user?.email || ''}`}
             className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-[#161c2c] text-[12px] font-semibold text-mist-100"
           >
             {initial}
           </span>
           <button
             onClick={logout}
-            title="退出登录"
+            title="Đăng xuất"
             className="grid h-8 w-8 place-items-center rounded-lg text-mist-400 transition hover:bg-white/5 hover:text-rose-400"
           >
             <LogOut size={14} />

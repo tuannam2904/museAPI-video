@@ -34,7 +34,7 @@ export default function ChatDrawer({ open, onClose }) {
     setBusy(true);
     try {
       const out = await api.chat({ messages: next, model });
-      setMessages([...next, { role: 'assistant', content: out.content || '（空响应）' }]);
+      setMessages([...next, { role: 'assistant', content: out.content || '(Phản hồi trống)' }]);
     } catch (e) {
       toast(e.message, 'error');
       setMessages(next);
@@ -46,9 +46,9 @@ export default function ChatDrawer({ open, onClose }) {
   const copy = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast('已复制到剪贴板', 'ok');
+      toast('Đã sao chép vào clipboard', 'ok');
     } catch {
-      toast('复制失败', 'error');
+      toast('Sao chép thất bại', 'error');
     }
   };
 
@@ -60,17 +60,17 @@ export default function ChatDrawer({ open, onClose }) {
       <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[440px] flex-col border-l border-[#1e2432] bg-ink-900/95 backdrop-blur-xl fade-in">
         <div className="flex items-center justify-between border-b border-[#1e2432] px-4 py-3.5">
           <h2 className="flex items-center gap-2 text-[14px] font-semibold text-white">
-            <MessageSquare size={15} className="text-brand-400" /> 文本对话
+            <MessageSquare size={15} className="text-brand-400" /> Trò chuyện văn bản
           </h2>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setMessages([])}
-              title="清空对话"
+              title="Xóa cuộc trò chuyện"
               className="rounded-lg p-1.5 text-mist-400 hover:bg-ink-700 hover:text-white"
             >
               <Trash2 size={13} />
             </button>
-            <button onClick={onClose} title="缩小到按钮" className="rounded-lg p-1.5 text-mist-400 hover:bg-ink-700 hover:text-white">
+            <button onClick={onClose} title="Thu nhỏ thành nút" className="rounded-lg p-1.5 text-mist-400 hover:bg-ink-700 hover:text-white">
               <Minimize2 size={13} />
             </button>
           </div>
@@ -78,9 +78,9 @@ export default function ChatDrawer({ open, onClose }) {
 
         {/* 模型 */}
         <div className="flex items-center gap-2 border-b border-[#1e2432] px-4 py-2">
-          <span className="text-[10.5px] text-mist-400">文本模型</span>
+          <span className="text-[10.5px] text-mist-400">Mô hình văn bản</span>
           {models.length === 0 ? (
-            <span className="text-[11px] text-mist-400">暂无文本模型</span>
+            <span className="text-[11px] text-mist-400">Chưa có mô hình văn bản</span>
           ) : (
             <select
               value={model}
@@ -99,8 +99,8 @@ export default function ChatDrawer({ open, onClose }) {
           {messages.length === 0 ? (
             <div className="grid place-items-center py-16 text-center">
               <Sparkles size={24} className="text-brand-400/60" />
-              <p className="mt-2 text-[12px] text-mist-300">内置文本模型</p>
-              <p className="mt-0.5 text-[11px] text-mist-400">写脚本、改提示词、拆镜头都可以问</p>
+              <p className="mt-2 text-[12px] text-mist-300">Mô hình văn bản tích hợp</p>
+              <p className="mt-0.5 text-[11px] text-mist-400">Viết kịch bản, sửa câu lệnh, tách cảnh quay — hỏi gì cũng được</p>
             </div>
           ) : (
             messages.map((m, i) => (
@@ -124,7 +124,7 @@ export default function ChatDrawer({ open, onClose }) {
                       onClick={() => copy(m.content)}
                       className="mt-1.5 flex items-center gap-1 text-[10px] text-mist-400 hover:text-white"
                     >
-                      <Copy size={10} /> 复制回答
+                      <Copy size={10} /> Sao chép câu trả lời
                     </button>
                   )}
                 </div>
@@ -133,7 +133,7 @@ export default function ChatDrawer({ open, onClose }) {
           )}
           {busy && (
             <div className="flex items-center gap-2 text-[11.5px] text-mist-400">
-              <Loader2 size={12} className="animate-spin text-brand-400" /> 正在生成…
+              <Loader2 size={12} className="animate-spin text-brand-400" /> Đang tạo…
             </div>
           )}
         </div>
@@ -148,7 +148,7 @@ export default function ChatDrawer({ open, onClose }) {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
               }}
               rows={2}
-              placeholder="和文本模型聊聊…（Enter 发送）"
+              placeholder="Trò chuyện với mô hình văn bản… (Enter để gửi)"
               className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border border-[#1e2432] bg-ink-850 px-3 py-2 text-[12.5px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/50"
             />
             <button
@@ -156,7 +156,7 @@ export default function ChatDrawer({ open, onClose }) {
               disabled={busy}
               className="flex h-[44px] items-center gap-1.5 rounded-xl brand-gradient px-4 text-[12.5px] font-medium text-white disabled:opacity-50"
             >
-              {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} 发送
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Gửi
             </button>
           </div>
         </div>
