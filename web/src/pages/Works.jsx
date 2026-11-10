@@ -5,9 +5,9 @@ import { api, fmtAgo, fmtBytes } from '../lib/api.js';
 import { Badge, Button, Empty, Modal, useToast, Spinner } from '../components/ui.jsx';
 
 const FILTERS = [
-  ['', '全部', Film],
-  ['video', '视频', Film],
-  ['image', '图片', ImageIcon],
+  ['', 'Tất cả', Film],
+  ['video', 'Video', Film],
+  ['image', 'Hình ảnh', ImageIcon],
 ];
 
 export default function Works() {
@@ -36,13 +36,13 @@ export default function Works() {
   useEffect(() => { setPage(1); }, [type]);
 
   const remove = async (job) => {
-    if (!confirm('删除这条作品？文件会一起删掉。')) return;
+    if (!confirm('Xóa tác phẩm này? Tệp sẽ bị xóa cùng.')) return;
     try {
       await api.deleteJob(job.id);
       setJobs((l) => l.filter((j) => j.id !== job.id));
       setTotal((t) => t - 1);
       setPreview(null);
-      toast('已删除', 'ok');
+      toast('Đã xóa', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -68,9 +68,9 @@ export default function Works() {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[12.5px] text-mist-400">共 {total} 条</span>
+          <span className="text-[12.5px] text-mist-400">Tổng {total} mục</span>
           <Button variant="outline" size="sm" onClick={load} loading={loading}>
-            <RefreshCw size={13} /> 刷新
+            <RefreshCw size={13} /> Làm mới
           </Button>
         </div>
       </div>
@@ -84,9 +84,9 @@ export default function Works() {
       ) : jobs.length === 0 ? (
         <Empty
           icon={Film}
-          title="还没有作品"
-          desc="去创作台生成第一条视频"
-          action={<Button onClick={() => (window.location.href = '/studio')}>去创作</Button>}
+          title="Chưa có tác phẩm nào"
+          desc="Đến bàn sáng tạo để tạo video đầu tiên"
+          action={<Button onClick={() => (window.location.href = '/studio')}>Đi tạo ngay</Button>}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -99,16 +99,16 @@ export default function Works() {
       {pages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-2">
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            上一页
+            Trang trước
           </Button>
           <span className="px-2 text-[12.5px] text-mist-400">{page} / {pages}</span>
           <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
-            下一页
+            Trang sau
           </Button>
         </div>
       )}
 
-      <Modal open={!!preview} onClose={() => setPreview(null)} title="作品详情" width="max-w-3xl">
+      <Modal open={!!preview} onClose={() => setPreview(null)} title="Chi tiết tác phẩm" width="max-w-3xl">
         {preview && (
           <div className="space-y-3">
             <div className="overflow-hidden rounded-xl bg-black/50">
@@ -122,25 +122,25 @@ export default function Works() {
                 <video src={preview.result.url} controls className="max-h-[60vh] w-full" />
               ) : (
                 <div className="grid h-40 place-items-center text-[13px] text-mist-400">
-                  {preview.status === 'failed' ? preview.error : '暂无媒体文件'}
+                  {preview.status === 'failed' ? preview.error : 'Chưa có tệp media'}
                 </div>
               )}
             </div>
             <p className="text-[13px] leading-relaxed text-mist-200">{preview.prompt}</p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-500">
               <span>{preview.params?.duration || 5}s · {preview.params?.size}</span>
-              <span>{preview.cost} 积分</span>
+              <span>{preview.cost} điểm</span>
               <span>{fmtAgo(preview.createdAt)}</span>
               {preview.result?.bytes && <span>{fmtBytes(preview.result.bytes)}</span>}
             </div>
             <div className="flex gap-2 pt-1">
               {(preview.mediaUrl || preview.result?.url) && (
                 <a href={preview.mediaUrl || preview.result.url} download>
-                  <Button variant="soft" size="sm"><Download size={13} /> 下载</Button>
+                  <Button variant="soft" size="sm"><Download size={13} /> Tải xuống</Button>
                 </a>
               )}
               <Button variant="danger" size="sm" onClick={() => remove(preview)}>
-                <Trash2 size={13} /> 删除
+                <Trash2 size={13} /> Xóa
               </Button>
             </div>
           </div>
@@ -188,18 +188,18 @@ function WorkCard({ job, onOpen, onDelete }) {
                   {job.progress || 0}%
                 </div>
               ) : failed ? (
-                <span className="px-3 text-center text-[12px] text-rose-400">{job.error || '生成失败'}</span>
+                <span className="px-3 text-center text-[12px] text-rose-400">{job.error || 'Tạo thất bại'}</span>
               ) : (
-                <span className="text-[12px] text-ink-500">无预览</span>
+                <span className="text-[12px] text-ink-500">Không có bản xem trước</span>
               )}
             </div>
           )}
 
           <div className="absolute left-2 top-2 flex gap-1.5">
             <Badge tone={job.type === 'video' ? 'brand' : 'neutral'}>
-              {job.type === 'video' ? '视频' : '图片'}
+              {job.type === 'video' ? 'Video' : 'Hình ảnh'}
             </Badge>
-            {failed && <Badge tone="error">失败</Badge>}
+            {failed && <Badge tone="error">Thất bại</Badge>}
           </div>
 
           {job.mediaUrl && (

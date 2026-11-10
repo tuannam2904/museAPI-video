@@ -6,9 +6,9 @@ import { useAuth } from '../store/auth.jsx';
 import { Button, Field, Input, useToast } from '../components/ui.jsx';
 
 const HIGHLIGHTS = [
-  { icon: Film, title: '文生视频 · 图生视频', desc: '一句话出 5–10 秒成片，首尾帧与参考图都能喂' },
-  { icon: Layers, title: '无限画布 · 节点工作流', desc: '拖拽节点串起生成流程，自动保存不用管' },
-  { icon: Zap, title: '账号池 · 自动调度', desc: '多账号轮转与续期，失败自动退还积分' },
+  { icon: Film, title: 'Video từ văn bản · Video từ hình ảnh', desc: 'Một câu lệnh tạo video 5–10 giây, hỗ trợ khung hình đầu/cuối và ảnh tham khảo' },
+  { icon: Layers, title: 'Canvas vô hạn · Luồng công việc dạng node', desc: 'Kéo thả node để nối quy trình tạo, tự động lưu' },
+  { icon: Zap, title: 'Kho tài khoản · Tự động điều phối', desc: 'Luân chuyển và gia hạn nhiều tài khoản, thất bại tự động hoàn điểm' },
 ];
 
 export default function Login() {
@@ -30,10 +30,10 @@ export default function Login() {
     try {
       if (mode === 'login') {
         await login(form.email.trim(), form.password);
-        toast('欢迎回来', 'ok');
+        toast('Chào mừng bạn trở lại', 'ok');
       } else {
         await register(form.email.trim(), form.password, form.name.trim() || undefined, ref || undefined);
-        toast(ref ? '注册成功，受邀奖励已到账' : '注册成功，已赠送积分', 'ok');
+        toast(ref ? 'Đăng ký thành công, phần thưởng mời đã được cộng' : 'Đăng ký thành công, đã tặng điểm', 'ok');
       }
     } catch (ex) {
       setErr(ex.message);
@@ -54,11 +54,11 @@ export default function Login() {
           </div>
 
           <h1 className="mt-6 text-[30px] font-semibold leading-tight tracking-tight text-white">
-            把一句话<br />
-            变成<span className="brand-text"> 能用的片子</span>
+            Biến một câu nói<br />
+            thành<span className="brand-text"> video dùng được ngay</span>
           </h1>
           <p className="mt-3 max-w-md text-[13px] leading-relaxed text-mist-400">
-            把 muse.ai 的账号能力封装成创作平台，视频生成、无限画布与账号池一体化。
+            Nền tảng sáng tạo gói gọn khả năng tài khoản muse.ai — tạo video, canvas vô hạn và kho tài khoản trong một nơi.
           </p>
 
           <div className="mt-8 space-y-3">
@@ -92,8 +92,8 @@ export default function Login() {
           <div className="rounded-2xl border border-[#1a2030] bg-[#0b0f17]/80 p-6 backdrop-blur-xl">
             <div className="mb-5 flex rounded-xl bg-ink-900 p-1">
               {[
-                ['login', '登录'],
-                ['register', '注册'],
+                ['login', 'Đăng nhập'],
+                ['register', 'Đăng ký'],
               ].map(([k, label]) => (
                 <button
                   key={k}
@@ -111,17 +111,17 @@ export default function Login() {
             <form onSubmit={submit} className="space-y-3.5">
               {ref && (
                 <div className="flex items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-[11.5px] text-brand-300">
-                  <Gift size={13} /> 你被邀请注册，完成后双方各得 50 积分
+                  <Gift size={13} /> Bạn được mời đăng ký, sau khi hoàn tất cả hai bên đều nhận 50 điểm
                 </div>
               )}
 
               {mode === 'register' && (
-                <Field label="昵称">
-                  <Input value={form.name} onChange={set('name')} placeholder="随便起个名字" />
+                <Field label="Tên hiển thị">
+                  <Input value={form.name} onChange={set('name')} placeholder="Đặt tên gì cũng được" />
                 </Field>
               )}
 
-              <Field label="邮箱">
+              <Field label="Email">
                 <Input
                   type="email"
                   required
@@ -132,13 +132,13 @@ export default function Login() {
                 />
               </Field>
 
-              <Field label="密码" hint={mode === 'register' ? '至少 6 位' : undefined}>
+              <Field label="Mật khẩu" hint={mode === 'register' ? 'Ít nhất 6 ký tự' : undefined}>
                 <Input
                   type="password"
                   required
                   value={form.password}
                   onChange={set('password')}
-                  placeholder={mode === 'register' ? '至少 6 位' : '输入密码'}
+                  placeholder={mode === 'register' ? 'Ít nhất 6 ký tự' : 'Nhập mật khẩu'}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 />
               </Field>
@@ -150,13 +150,13 @@ export default function Login() {
               )}
 
               <Button type="submit" size="lg" loading={loading} className="w-full">
-                {mode === 'login' ? '进入工作台' : '注册并开始'}
+                {mode === 'login' ? 'Vào bàn làm việc' : 'Đăng ký và bắt đầu'}
                 {!loading && <ArrowRight size={16} />}
               </Button>
             </form>
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-[10.5px] text-ink-500">
-              <Sparkles size={11} /> 首次使用请先在「账号管理」绑定 muse.ai 账号
+              <Sparkles size={11} /> Lần đầu sử dụng, hãy liên kết tài khoản muse.ai trong mục «Nhập Muse» trước
             </p>
           </div>
         </div>

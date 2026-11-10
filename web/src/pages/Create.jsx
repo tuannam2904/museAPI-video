@@ -12,10 +12,10 @@ import QueueDrawer from '../components/QueueDrawer.jsx';
 import ParamsPanel, { buildExtra, PARAM_DEFAULTS } from '../components/ParamsPanel.jsx';
 
 const IDEAS = [
-  '国风少女：汉服少女立于桃花树下，花瓣纷飞，电影感光效',
-  '赛博都市：雨夜霓虹街道，机甲少年回眸，赛博朋克风格',
-  '水墨山水：云雾缭绕的黄山奇松，水墨晕染，大面积留白',
-  '柴犬侦探：戴圆框眼镜的柴犬，复古英伦风插画，暖色调',
+  'Thiếu nữ cổ phong：Thiếu nữ mặc Hán phục đứng dưới gốc đào, cánh hoa bay đầy trời, ánh sáng điện ảnh',
+  'Đô thị cyber：Đường phố neon trong đêm mưa, thiếu niên cơ giáp ngoái nhìn, phong cách cyberpunk',
+  'Sơn thủy thủy mặc：Thông kỳ lạ núi Hoàng Sơn trong mây mù, mực loang, khoảng trắng rộng',
+  'Chú chó Shiba thám tử：Chó Shiba đeo kính tròn, tranh minh họa phong cách Anh cổ điển, tông ấm',
 ];
 
 const STORE_KEY = 'xm_projects';
@@ -57,17 +57,17 @@ export default function Create() {
   }, [projects]);
 
   const addProject = () => {
-    const name = window.prompt('请输入项目名称（必填）', '');
+    const name = window.prompt('Nhập tên dự án (bắt buộc)', '');
     if (!name?.trim()) return;
     const p = { id: 'p_' + Date.now(), name: name.trim(), createdAt: Date.now() };
     setProjects((list) => [p, ...list]);
     setActive(p.id);
-    toast('项目已创建', 'ok');
+    toast('Đã tạo dự án', 'ok');
   };
 
   const removeProject = (e, id) => {
     e.stopPropagation();
-    if (!window.confirm('确认删除这个项目？')) return;
+    if (!window.confirm('Xác nhận xóa dự án này?')) return;
     setProjects((list) => list.filter((p) => p.id !== id));
     if (active === id) setActive(null);
   };
@@ -115,12 +115,12 @@ export default function Create() {
   /* ---------- 上传 ---------- */
   const onPick = async (files) => {
     if (!files?.length) return;
-    if (refs.length + files.length > 3) return toast('最多 3 张参考图', 'error');
+    if (refs.length + files.length > 3) return toast('Tối đa 3 ảnh tham khảo', 'error');
     setUploading(true);
     try {
       const out = await api.upload(Array.from(files));
       setRefs((r) => [...r, ...out.files].slice(0, 3));
-      toast('图片已上传', 'ok');
+      toast('Đã tải ảnh lên', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -131,8 +131,8 @@ export default function Create() {
 
   /* ---------- 生成 ---------- */
   const generate = async () => {
-    if (prompt.trim().length < 2) return toast('请先输入提示词并选择模型', 'error');
-    if ((user?.credits ?? 0) < cost) return toast(`积分不足，本次需要 ${cost}`, 'error');
+    if (prompt.trim().length < 2) return toast('Hãy nhập câu lệnh và chọn mô hình trước', 'error');
+    if ((user?.credits ?? 0) < cost) return toast(`Không đủ điểm, lần này cần ${cost}`, 'error');
     setBusy(true);
     try {
       await api.createVideo({
@@ -146,7 +146,7 @@ export default function Create() {
       setRefs([]);
       await loadJobs();
       refresh();
-      toast('任务已加入队列', 'ok');
+      toast('Tác vụ đã vào hàng đợi', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -161,12 +161,12 @@ export default function Create() {
 
   const clearFailed = async () => {
     const failed = jobs.filter((j) => j.status === 'failed');
-    if (!failed.length) return toast('没有失败的任务', 'error');
-    if (!confirm(`清除 ${failed.length} 条失败任务？`)) return;
+    if (!failed.length) return toast('Không có tác vụ thất bại', 'error');
+    if (!confirm(`Xóa ${failed.length} tác vụ thất bại?`)) return;
     try {
       await Promise.all(failed.map((j) => api.deleteJob(j.id)));
       setJobs((l) => l.filter((j) => j.status !== 'failed'));
-      toast('已清理失败任务', 'ok');
+      toast('Đã dọn các tác vụ thất bại', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -187,7 +187,7 @@ export default function Create() {
             onChange={(e) => setActive(e.target.value || null)}
             className="cursor-pointer appearance-none bg-transparent pr-5 text-[14px] font-medium text-white outline-none"
           >
-            <option value="" className="bg-ink-800">全部作品</option>
+            <option value="" className="bg-ink-800">Tất cả tác phẩm</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id} className="bg-ink-800">{p.name}</option>
             ))}
@@ -217,17 +217,17 @@ export default function Create() {
           ))}
           <button
             onClick={addProject}
-            title="新建项目"
+            title="Dự án mới"
             className="flex shrink-0 items-center gap-1 rounded-xl border border-dashed border-white/10 px-3 py-1.5 text-[12.5px] text-mist-400 transition hover:border-brand-400/50 hover:text-brand-300"
           >
-            <Plus size={13} /> 新建
+            <Plus size={13} /> Mới
           </button>
         </div>
 
         <div className="ml-auto flex items-center gap-3">
           <button
             onClick={() => nav('/accounts')}
-            title={summary?.usable ? `可用账号 ${summary.usable}/${summary.total}` : '还没有可用账号，点这里导入'}
+            title={summary?.usable ? `Tài khoản khả dụng ${summary.usable}/${summary.total}` : 'Chưa có tài khoản khả dụng, bấm vào đây để nhập'}
             className={clsx(
               'flex items-center gap-3 rounded-2xl border px-3.5 py-2 transition',
               summary?.usable
@@ -240,7 +240,7 @@ export default function Create() {
                 <Users size={14} className="text-mist-300" />
                 <div className="text-left">
                   <p className="text-[11.5px] text-mist-200">
-                    {summary.usable} 账号 · 剩 {summary.weeklyLeftPct ?? '—'}%
+                    {summary.usable} tài khoản · Còn {summary.weeklyLeftPct ?? '—'}%
                   </p>
                   <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-white/[0.06]">
                     <div
@@ -253,14 +253,14 @@ export default function Create() {
             ) : (
               <>
                 <AlertTriangle size={13} className="text-amber-400" />
-                <span className="text-[12px] text-amber-300">未接账号</span>
+                <span className="text-[12px] text-amber-300">Chưa kết nối tài khoản</span>
               </>
             )}
           </button>
-          <button onClick={loadJobs} title="刷新" className="grid h-9 w-9 place-items-center rounded-xl text-mist-400 transition hover:bg-white/5 hover:text-brand-300">
+          <button onClick={loadJobs} title="Làm mới" className="grid h-9 w-9 place-items-center rounded-xl text-mist-400 transition hover:bg-white/5 hover:text-brand-300">
             <RefreshCw size={15} />
           </button>
-          <button onClick={() => setQueueOpen(true)} title="队列" className="relative grid h-9 w-9 place-items-center rounded-xl text-mist-400 transition hover:bg-white/5 hover:text-white">
+          <button onClick={() => setQueueOpen(true)} title="Hàng đợi" className="relative grid h-9 w-9 place-items-center rounded-xl text-mist-400 transition hover:bg-white/5 hover:text-white">
             <Bell size={16} />
             {running > 0 && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-brand-400 pulse-dot" />}
           </button>
@@ -271,12 +271,12 @@ export default function Create() {
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-4">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-[14px] font-medium text-white">{activeProject?.name || '全部作品'}</h2>
+            <h2 className="text-[14px] font-medium text-white">{activeProject?.name || 'Tất cả tác phẩm'}</h2>
             <span className="text-[12px] text-mist-400">{shown.length}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="seg">
-              {[['all', '全部'], ['done', '已完成']].map(([k, label]) => (
+              {[['all', 'Tất cả'], ['done', 'Đã xong']].map(([k, label]) => (
                 <button key={k} onClick={() => setFilter(k)} className={clsx(filter === k && 'on')} style={{ minWidth: 0, padding: '4px 12px', fontSize: 12 }}>
                   {label}
                 </button>
@@ -286,7 +286,7 @@ export default function Create() {
               onClick={clearFailed}
               className="flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[12px] text-mist-400 transition hover:bg-white/5 hover:text-rose-400"
             >
-              <Trash2 size={12} /> 清除失败
+              <Trash2 size={12} /> Dọn tác vụ lỗi
             </button>
           </div>
         </div>
@@ -296,8 +296,8 @@ export default function Create() {
             <div className="grid h-14 w-14 place-items-center rounded-2xl border border-white/[0.07] bg-ink-800">
               <Sparkles size={22} className="text-brand-400" />
             </div>
-            <h3 className="mt-4 text-[15px] font-medium text-mist-100">在下方工作台描述画面，开始创作</h3>
-            <p className="mt-1.5 text-[12.5px] text-mist-400">支持文生视频、参考图生成，生成进度会实时显示在这里</p>
+            <h3 className="mt-4 text-[15px] font-medium text-mist-100">Mô tả khung hình ở bàn làm việc bên dưới để bắt đầu sáng tạo</h3>
+            <p className="mt-1.5 text-[12.5px] text-mist-400">Hỗ trợ tạo video từ văn bản và từ ảnh tham khảo, tiến độ tạo hiển thị trực tiếp tại đây</p>
             <div className="mt-6 flex max-w-[640px] flex-wrap justify-center gap-2">
               {IDEAS.map((idea) => (
                 <button
@@ -335,7 +335,7 @@ export default function Create() {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate();
                 }}
                 rows={3}
-                placeholder="描述视频内容，风格，或参考画面…（Ctrl+Enter 生成）"
+                placeholder="Mô tả nội dung video, phong cách hoặc hình ảnh tham khảo… (Ctrl+Enter để tạo)"
                 className="block w-full resize-none bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70"
               />
               <span className="pointer-events-none absolute bottom-2 right-3 font-mono text-[10.5px] text-mist-400">
@@ -345,7 +345,7 @@ export default function Create() {
 
             {/* 参考画面 */}
             <div className="lg:w-[44%]">
-              <p className="mb-2 text-[12.5px] font-medium text-mist-200">参考画面</p>
+              <p className="mb-2 text-[12.5px] font-medium text-mist-200">Hình ảnh tham khảo</p>
               <div className="flex flex-wrap items-center gap-2">
                 {refs.map((r) => (
                   <div
@@ -367,14 +367,14 @@ export default function Create() {
                 {refs.length < 3 && (
                   <button
                     onClick={() => fileRef.current?.click()}
-                    title="上传参考图（最多 3 张）"
+                    title="Tải ảnh tham khảo lên (tối đa 3 ảnh)"
                     className="grid h-11 w-11 place-items-center rounded-xl border border-white/[0.07] bg-[#0d111c] text-mist-300 transition hover:border-brand-400/50 hover:text-brand-300"
                   >
                     {uploading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={16} />}
                   </button>
                 )}
                 {refs.length === 0 && (
-                  <span className="text-[11.5px] text-mist-400">可选，最多 3 张，提示词中用 @ 引用</span>
+                  <span className="text-[11.5px] text-mist-400">Không bắt buộc, tối đa 3 ảnh, dùng @ trong câu lệnh để tham chiếu</span>
                 )}
               </div>
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPick(e.target.files)} />
@@ -384,7 +384,7 @@ export default function Create() {
           {/* 操作行 */}
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
             <div className="flex items-center gap-2.5">
-              <span className="text-[12.5px] text-mist-300">时长</span>
+              <span className="text-[12.5px] text-mist-300">Thời lượng</span>
               <div className="seg">
                 {[5, 8, 10].map((d) => (
                   <button key={d} onClick={() => setDuration(d)} className={clsx(duration === d && 'on')}>
@@ -395,7 +395,7 @@ export default function Create() {
             </div>
 
             <div className="flex items-center gap-2.5">
-              <span className="text-[12.5px] text-mist-300">比例</span>
+              <span className="text-[12.5px] text-mist-300">Tỉ lệ</span>
               <div className="seg">
                 {['16:9', '9:16', '1:1'].map((sz) => (
                   <button key={sz} onClick={() => setSize(sz)} className={clsx(size === sz && 'on')}>
@@ -458,7 +458,7 @@ export default function Create() {
         params={params}
         onChange={setParams}
       />
-      <Modal open={!!preview} onClose={() => setPreview(null)} title="作品详情" width="max-w-2xl">
+      <Modal open={!!preview} onClose={() => setPreview(null)} title="Chi tiết tác phẩm" width="max-w-2xl">
         {preview && (
           <div className="space-y-3">
             <div className="overflow-hidden rounded-xl bg-black/50">
@@ -470,14 +470,14 @@ export default function Create() {
                 )
               ) : (
                 <div className="grid h-36 place-items-center text-[12.5px] text-mist-400">
-                  {preview.status === 'failed' ? preview.error : '还在生成中'}
+                  {preview.status === 'failed' ? preview.error : 'Đang tạo…'}
                 </div>
               )}
             </div>
             <p className="text-[13px] leading-relaxed text-mist-200">{preview.prompt}</p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-ink-500">
               <span>{preview.params?.duration}s · {preview.params?.size}</span>
-              <span>{preview.cost} 积分</span>
+              <span>{preview.cost} điểm</span>
               {preview.params?.extra && <span className="truncate">{preview.params.extra}</span>}
               <span>{fmtAgo(preview.createdAt)}</span>
             </div>
@@ -485,25 +485,25 @@ export default function Create() {
               {preview.mediaUrl && (
                 <a href={preview.mediaUrl} download>
                   <button className="rounded-lg border border-[#232a38] px-3.5 py-1.5 text-[12px] text-mist-200 hover:border-brand-500/50 hover:text-white">
-                    下载
+                    Tải xuống
                   </button>
                 </a>
               )}
               <button
                 onClick={async () => {
-                  if (!confirm('删除这条作品？文件会一起删掉。')) return;
+                  if (!confirm('Xóa tác phẩm này? Tệp sẽ bị xóa cùng.')) return;
                   try {
                     await api.deleteJob(preview.id);
                     setJobs((l) => l.filter((x) => x.id !== preview.id));
                     setPreview(null);
-                    toast('已删除', 'ok');
+                    toast('Đã xóa', 'ok');
                   } catch (e) {
                     toast(e.message, 'error');
                   }
                 }}
                 className="rounded-lg border border-rose-500/30 px-3.5 py-1.5 text-[12px] text-rose-300 hover:bg-rose-500/10"
               >
-                删除
+                Xóa
               </button>
             </div>
           </div>
@@ -518,7 +518,7 @@ function JobTile({ job, onClick }) {
   const failed = job.status === 'failed';
   const done = job.status === 'completed';
   const isVideo = /\.(mp4|webm|mov)/i.test(job.mediaUrl || '');
-  const title = (job.prompt || '未命名').split(/[：:，,。]/)[0].slice(0, 18);
+  const title = (job.prompt || 'Chưa đặt tên').split(/[：:，,。]/)[0].slice(0, 18);
 
   return (
     <button
@@ -565,7 +565,7 @@ function JobTile({ job, onClick }) {
         {running && <span className="h-1.5 w-1.5 rounded-full bg-brand-400 pulse-dot" />}
         {done && <Check size={11} />}
         {failed && <X size={11} />}
-        {running ? `Generating · ${job.progress || 0}%` : done ? 'Done' : failed ? 'Failed' : job.status}
+        {running ? `Đang tạo · ${job.progress || 0}%` : done ? 'Xong' : failed ? 'Thất bại' : job.status}
       </span>
 
       <div className="absolute inset-x-0 bottom-0 p-3.5">

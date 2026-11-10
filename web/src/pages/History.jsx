@@ -6,10 +6,10 @@ import { api, fmtAgo } from '../lib/api.js';
 import { useToast } from '../components/ui.jsx';
 
 const TABS = [
-  ['all', '全部'],
-  ['done', '已完成'],
-  ['running', '生成中'],
-  ['failed', '失败'],
+  ['all', 'Tất cả'],
+  ['done', 'Đã xong'],
+  ['running', 'Đang tạo'],
+  ['failed', 'Thất bại'],
 ];
 
 export default function History() {
@@ -50,10 +50,10 @@ export default function History() {
           <p className="eyebrow">Archive</p>
           <h1 className="mt-2 flex items-center gap-2.5 text-[30px] font-semibold tracking-tight text-white">
             <Clock size={24} className="text-brand-400" strokeWidth={1.6} />
-            创作历史
+            Lịch sử sáng tạo
           </h1>
           <p className="mt-1.5 text-[12.5px] text-mist-400">
-            共 <span className="font-mono text-mist-200">{total}</span> 条创作记录，支持下载、复制链接、重新生成
+            Tổng <span className="font-mono text-mist-200">{total}</span> bản ghi sáng tạo, hỗ trợ tải xuống, sao chép liên kết, tạo lại
           </p>
         </div>
 
@@ -83,13 +83,13 @@ export default function History() {
             <div className="mb-4 grid h-20 w-20 place-items-center rounded-2xl bg-[#141a26]">
               <Clock size={30} className="text-mist-400/60" strokeWidth={1.4} />
             </div>
-            <p className="text-[14px] text-mist-300">暂无历史记录</p>
-            <p className="mt-1 text-[12px] text-mist-400">去创作中心提交一个任务吧</p>
+            <p className="text-[14px] text-mist-300">Chưa có lịch sử</p>
+            <p className="mt-1 text-[12px] text-mist-400">Hãy đến trung tâm sáng tạo để gửi một tác vụ</p>
             <button
               onClick={() => nav('/create')}
               className="mt-5 rounded-full brand-gradient px-6 py-2.5 text-[13px] font-medium text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110"
             >
-              前往创作中心
+              Đến trung tâm sáng tạo
             </button>
           </div>
         ) : (
@@ -130,7 +130,7 @@ export default function History() {
                       ['queued', 'processing'].includes(j.status) && 'bg-gold-400/15 text-gold-400'
                     )}
                   >
-                    {j.status === 'completed' ? '已完成' : j.status === 'failed' ? '失败' : '生成中'}
+                    {j.status === 'completed' ? 'Đã xong' : j.status === 'failed' ? 'Thất bại' : 'Đang tạo'}
                   </span>
 
                   <div className="flex shrink-0 gap-1">
@@ -140,17 +140,17 @@ export default function History() {
                           href={j.mediaUrl}
                           download
                           className="grid h-7 w-7 place-items-center rounded-md text-mist-400 transition hover:bg-ink-700 hover:text-white"
-                          title="下载"
+                          title="Tải xuống"
                         >
                           <Download size={13} />
                         </a>
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(location.origin + j.mediaUrl);
-                            toast('链接已复制', 'ok');
+                            toast('Đã sao chép liên kết', 'ok');
                           }}
                           className="grid h-7 w-7 place-items-center rounded-md text-mist-400 transition hover:bg-ink-700 hover:text-white"
-                          title="复制链接"
+                          title="Sao chép liên kết"
                         >
                           <Link2 size={13} />
                         </button>
@@ -159,7 +159,7 @@ export default function History() {
                     <button
                       onClick={() => nav('/create')}
                       className="grid h-7 w-7 place-items-center rounded-md text-mist-400 transition hover:bg-ink-700 hover:text-brand-300"
-                      title="重新生成"
+                      title="Tạo lại"
                     >
                       <RotateCcw size={13} />
                     </button>

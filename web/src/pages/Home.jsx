@@ -7,14 +7,14 @@ import { useAuth } from '../store/auth.jsx';
 
 /* 逆向自目标站首页的 AI 要闻（静态内容位，可在后台配置） */
 const BRIEFING = [
-  { tag: '芯片动脉', text: '基元律动发布 NeoHorse-1.5-Flash Preview，Agent 模型 RSI 进入第二轮迭代' },
-  { tag: '芯片动脉', text: '英伟达 CEO 黄仁勋承认出舱全员何道歉，官方已启动内部紧急调查' },
-  { tag: '行业研究', text: '行业分析显示终端侧 AI 发展进入新阶段，从单点应用走向智能体体验' },
-  { tag: '腾讯', text: '腾讯混元跻身头部开源模型，实测 Hy4 搭配 WorkBuddy 多模态 Agent 交付能力优异' },
-  { tag: '阿里巴巴', text: '阿里发布千问办公 2.0，推出首个支持多人与 Agent 协作的 Team Agent' },
-  { tag: '奔驰宝马', text: '奔驰宝马官宣终止 L3 级自动驾驶研发，称其使用体验不及现有 L2 系统' },
-  { tag: '开源行业', text: 'AI 可完整复现 8 万 Star 开源公司，包揽写代码派任务查 Bug 等全流程工作' },
-  { tag: '基元律动', text: '基元律动发布 NeoHorse-1.5-Flash Preview，Agent 模型 RSI 进入第二轮迭代' },
+  { tag: 'Mạch chip', text: 'Cơ Nguyên Luật Động phát hành NeoHorse-1.5-Flash Preview, mô hình Agent RSI bước vào vòng lặp thứ hai' },
+  { tag: 'Mạch chip', text: 'CEO NVIDIA Jensen Huang lên tiếng xin lỗi, phía chính thức đã mở cuộc điều tra nội bộ khẩn cấp' },
+  { tag: 'Nghiên cứu ngành', text: 'Phân tích ngành cho thấy AI trên thiết bị đầu cuối bước vào giai đoạn mới, từ ứng dụng đơn lẻ chuyển sang trải nghiệm tác nhân thông minh' },
+  { tag: 'Tencent', text: 'Hunyuan của Tencent lọt vào nhóm mô hình mã nguồn mở hàng đầu, thực nghiệm Hy4 kết hợp WorkBuddy cho khả năng triển khai Agent đa phương thức vượt trội' },
+  { tag: 'Alibaba', text: 'Alibaba phát hành Qwen Office 2.0, ra mắt Team Agent đầu tiên hỗ trợ nhiều người cộng tác cùng Agent' },
+  { tag: 'Mercedes-Benz và BMW', text: 'Mercedes-Benz và BMW chính thức tuyên bố dừng phát triển lái tự động cấp L3, cho rằng trải nghiệm sử dụng không bằng hệ thống L2 hiện tại' },
+  { tag: 'Ngành mã nguồn mở', text: 'AI có thể tái tạo hoàn chỉnh một công ty mã nguồn mở 80.000 Star, đảm nhiệm toàn bộ quy trình từ viết code, giao việc đến kiểm tra lỗi' },
+  { tag: 'Cơ Nguyên Luật Động', text: 'Cơ Nguyên Luật Động phát hành NeoHorse-1.5-Flash Preview, mô hình Agent RSI bước vào vòng lặp thứ hai' },
 ];
 
 export default function Home() {
@@ -45,7 +45,7 @@ export default function Home() {
         <section className="rounded-2xl border border-[#1a2030] bg-[#0c1017]/70 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-wide text-white">
-              AI 要闻
+              Tin tức AI
             </h2>
             <span className="font-mono text-[11px] tracking-wider text-mist-400">{dateStr}</span>
           </div>
@@ -75,7 +75,7 @@ export default function Home() {
         <section className="glow-frame relative overflow-hidden rounded-2xl border border-brand-500/20 bg-[#070b12]">
           <div className="absolute right-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-brand-500/30 bg-black/50 px-2.5 py-1 backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-400 pulse-dot" />
-            <span className="text-[10.5px] text-mist-200">实时渲染</span>
+            <span className="text-[10.5px] text-mist-200">Kết xuất trực tiếp</span>
             <span className="font-mono text-[10px] tracking-wider text-brand-300">GPU ONLINE</span>
           </div>
 
@@ -102,7 +102,7 @@ export default function Home() {
                     <div className="text-center">
                       <p className="font-display text-[13px] tracking-[0.3em] text-brand-300/80">CINEMA</p>
                       <p className="mt-1 font-mono text-[10px] tracking-[0.24em] text-mist-400">
-                        一句话高空 · LED 四季全息
+                        Một câu lệnh vút cao · LED bốn mùa toàn ảnh
                       </p>
                     </div>
                   </div>
@@ -116,7 +116,7 @@ export default function Home() {
 
             <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
               <p className="font-mono text-[10px] tracking-[0.16em] text-white/55">
-                SHOT 01 · 一句话高空 · LED 四季全息
+                SHOT 01 · Một câu lệnh vút cao · LED bốn mùa toàn ảnh
               </p>
               <div className="flex items-center gap-1">
                 {[0, 1, 2, 3].map((i) => (
@@ -133,7 +133,7 @@ export default function Home() {
 
             <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-2.5 py-1 backdrop-blur">
               <span className="text-[10px] text-brand-300">◆</span>
-              <span className="text-[10.5px] text-white/80">CINEMA 4K · 四季自动轮播</span>
+              <span className="text-[10.5px] text-white/80">CINEMA 4K · Tự động xoay bốn mùa</span>
             </div>
           </div>
         </section>
@@ -143,17 +143,17 @@ export default function Home() {
       <section className="mt-12">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <h2 className="font-display text-[30px] font-bold leading-none tracking-tight text-white">
-            作品广场
+            Quảng trường tác phẩm
           </h2>
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-mist-400">
-              共 <span className="font-mono text-mist-200">{works.length}</span> 件 · 点击 ♥ 点赞
+              Tổng <span className="font-mono text-mist-200">{works.length}</span> tác phẩm · Bấm ♥ để thích
             </span>
             <button
               onClick={() => nav('/create')}
               className="flex items-center gap-1.5 rounded-full border border-[#232a38] bg-ink-850 px-4 py-2 text-[12.5px] text-mist-200 transition hover:border-brand-500/50 hover:text-white"
             >
-              <Upload size={13} /> 上传作品
+              <Upload size={13} /> Đăng tác phẩm
             </button>
           </div>
         </div>
@@ -170,13 +170,13 @@ export default function Home() {
               <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-ink-800 text-brand-400">
                 <Sparkles size={20} />
               </div>
-              <p className="text-[14px] font-medium text-mist-200">广场还是空的</p>
-              <p className="mt-1 text-[12.5px] text-mist-400">生成第一条作品，它会出现在这里</p>
+              <p className="text-[14px] font-medium text-mist-200">Quảng trường vẫn trống</p>
+              <p className="mt-1 text-[12.5px] text-mist-400">Tạo tác phẩm đầu tiên, nó sẽ xuất hiện tại đây</p>
               <button
                 onClick={() => nav('/create')}
                 className="mt-4 rounded-full brand-gradient px-5 py-2 text-[13px] font-medium text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110"
               >
-                开始创作
+                Bắt đầu sáng tạo
               </button>
             </div>
           </div>
@@ -219,7 +219,7 @@ function WorkTile({ job, onClick }) {
             />
           )
         ) : (
-          <div className="grid h-full place-items-center text-[12px] text-mist-400">无预览</div>
+          <div className="grid h-full place-items-center text-[12px] text-mist-400">Không có bản xem trước</div>
         )}
 
         {isVideo && (

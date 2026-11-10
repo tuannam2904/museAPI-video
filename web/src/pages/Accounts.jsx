@@ -9,10 +9,10 @@ import { useAuth } from '../store/auth.jsx';
 import { Badge, Button, Drawer, Empty, Field, Input, Modal, Textarea, useToast } from '../components/ui.jsx';
 
 const STATUS = {
-  ok: { tone: 'ok', label: '可用' },
-  error: { tone: 'error', label: '异常' },
-  unknown: { tone: 'warn', label: '待检测' },
-  missing: { tone: 'error', label: '上游已删' },
+  ok: { tone: 'ok', label: 'Khả dụng' },
+  error: { tone: 'error', label: 'Lỗi' },
+  unknown: { tone: 'warn', label: 'Chờ kiểm tra' },
+  missing: { tone: 'error', label: 'Đã xóa ở upstream' },
 };
 
 export default function Accounts() {
@@ -48,7 +48,7 @@ export default function Accounts() {
     try {
       await api.refreshQuota(acc.upstreamId);
       await load();
-      toast('额度已刷新', 'ok');
+      toast('Đã làm mới hạn mức', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -70,12 +70,12 @@ export default function Accounts() {
   };
 
   const remove = async (acc) => {
-    if (!confirm(`删除账号「${acc.label}」？`)) return;
+    if (!confirm(`Xóa tài khoản «${acc.label}»?`)) return;
     setBusyId(acc.id);
     try {
       await api.deleteAccount(acc.id);
       setList((l) => l.filter((a) => a.id !== acc.id));
-      toast('已删除', 'ok');
+      toast('Đã xóa', 'ok');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -85,7 +85,7 @@ export default function Accounts() {
 
   const quotaText = (q) => {
     if (!q) return '—';
-    if (q.weeklyLeftPct != null) return `剩 ${q.weeklyLeftPct}%`;
+    if (q.weeklyLeftPct != null) return `Còn ${q.weeklyLeftPct}%`;
     if (typeof q === 'string') return q;
     return '—';
   };
@@ -103,20 +103,20 @@ export default function Accounts() {
       <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-tight text-white">
-            muse 导入
+            Nhập Muse
             <HelpCircle size={17} className="cursor-pointer text-mist-400 hover:text-mist-200" onClick={() => setGuide((v) => !v)} />
           </h1>
           <p className="mt-1.5 text-[13px] text-mist-400">
-            通过 Cookie 绑定 Muse 账号，轻松导入和管理你的 Muse 账户资产。
-            {user?.role === 'admin' ? '管理员导入的账号公共可用。' : '你导入的账号仅自己可见。'}
+            Liên kết tài khoản Muse bằng Cookie để nhập và quản lý tài sản tài khoản Muse của bạn một cách dễ dàng.
+            {user?.role === 'admin' ? 'Tài khoản do quản trị viên nhập được dùng chung.' : 'Tài khoản bạn nhập chỉ mình bạn thấy.'}
           </p>
         </div>
         <div className="flex gap-2.5">
           <Button onClick={() => setBindOpen(true)} className="h-11 px-5">
-            <Link2 size={15} /> 一键绑定
+            <Link2 size={15} /> Liên kết một chạm
           </Button>
           <Button variant="outline" onClick={() => setOpen(true)} className="h-11 px-5">
-            <Clipboard size={15} /> 粘贴 Cookie
+            <Clipboard size={15} /> Dán Cookie
           </Button>
         </div>
       </div>
@@ -125,20 +125,20 @@ export default function Accounts() {
       {guide && (
         <div className="panel mb-5 space-y-2.5 px-5 py-4 text-[12.5px] leading-relaxed text-mist-400 fade-in">
           <p className="flex items-center gap-2 text-[13px] font-medium text-mist-200">
-            <Info size={14} className="text-brand-400" /> 怎么拿到 Cookie？
+            <Info size={14} className="text-brand-400" /> Lấy Cookie bằng cách nào?
           </p>
           <p>
-            <b className="text-mist-200">方式一（推荐，免 F12）</b>：点右上角
-            <b className="text-brand-300">「一键绑定」</b>生成链接 → 在<span className="text-mist-200">已登录 muse.ai 的那个浏览器</span>里打开 →
-            扩展自动读取登录态并入库。扩展只需装一次。
+            <b className="text-mist-200">Cách 1 (khuyên dùng, không cần F12)</b>: Bấm nút ở góc phải phía trên 
+            <b className="text-brand-300">«Liên kết một chạm»</b>để tạo liên kết → mở trong <span className="text-mist-200">trình duyệt đã đăng nhập muse.ai</span>→
+            Tiện ích sẽ tự đọc trạng thái đăng nhập và lưu vào. Chỉ cần cài tiện ích một lần.
           </p>
           <p>
-            <b className="text-mist-200">方式二（手动兜底）</b>：点「粘贴 Cookie」，用 Chrome 打开{' '}
+            <b className="text-mist-200">Cách 2 (thủ công dự phòng)</b>: Bấm «Dán Cookie», dùng Chrome mở {' '}
             <a className="text-brand-400 hover:underline" href="https://muse.ai/" target="_blank" rel="noreferrer">muse.ai <ExternalLink size={10} className="inline" /></a>
-            {' '}登录 → <kbd className="rounded bg-white/5 px-1.5 py-0.5 text-[11px]">F12</kbd> → <b className="text-mist-200">Application → Cookies → https://muse.ai</b> →
-            复制整段（至少含 <code className="rounded bg-white/5 px-1 text-[11px]">hatch_sess</code>）。
+            {' '}đăng nhập → <kbd className="rounded bg-white/5 px-1.5 py-0.5 text-[11px]">F12</kbd> → <b className="text-mist-200">Application → Cookies → https://muse.ai</b> →
+            Sao chép toàn bộ đoạn (ít nhất phải có <code className="rounded bg-white/5 px-1 text-[11px]">hatch_sess</code>).
           </p>
-          <p className="text-ink-500">会话约 48 小时有效，过期后重新绑定即可。多个账号可以重复绑定，池子自动轮转。</p>
+          <p className="text-ink-500">Phiên đăng nhập hiệu lực khoảng 48 giờ, hết hạn thì liên kết lại. Có thể liên kết nhiều tài khoản, kho sẽ tự luân chuyển.</p>
         </div>
       )}
 
@@ -146,20 +146,20 @@ export default function Accounts() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <h2 className="text-[17px] font-semibold text-white">
-            我的 muse 账户 <span className="font-normal text-mist-400">({list.length})</span>
+            Tài khoản Muse của tôi <span className="font-normal text-mist-400">({list.length})</span>
           </h2>
           <button
             onClick={load}
             className="flex items-center gap-1.5 text-[12.5px] text-mist-300 transition hover:text-brand-300"
           >
-            <RefreshCw size={13} className={clsx(loading && 'animate-spin')} /> 刷新状态
+            <RefreshCw size={13} className={clsx(loading && 'animate-spin')} /> Làm mới trạng thái
           </button>
           {summary?.usable > 0 && (
             <span className="hidden items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-[11.5px] text-mist-300 md:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
-              可用 {summary.usable}/{summary.total}
-              {summary.weeklyLeftPct != null && <> · 平均剩 <b className="text-brand-300">{summary.weeklyLeftPct}%</b></>}
-              {summary.weeklyReset && <span className="text-ink-500"> · {summary.weeklyReset} 重置</span>}
+              Khả dụng {summary.usable}/{summary.total}
+              {summary.weeklyLeftPct != null && <> · Trung bình còn <b className="text-brand-300">{summary.weeklyLeftPct}%</b></>}
+              {summary.weeklyReset && <span className="text-ink-500"> · Đặt lại vào {summary.weeklyReset}</span>}
             </span>
           )}
         </div>
@@ -170,11 +170,11 @@ export default function Accounts() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="h-10 cursor-pointer appearance-none rounded-xl border border-white/[0.07] bg-[#121726] pl-3.5 pr-8 text-[12.5px] text-mist-200 outline-none focus:border-brand-400/50"
             >
-              <option value="all">全部状态</option>
-              <option value="ok">可用</option>
-              <option value="unknown">待检测</option>
-              <option value="error">异常</option>
-              <option value="missing">上游已删</option>
+              <option value="all">Tất cả trạng thái</option>
+              <option value="ok">Khả dụng</option>
+              <option value="unknown">Chờ kiểm tra</option>
+              <option value="error">Lỗi</option>
+              <option value="missing">Đã xóa ở upstream</option>
             </select>
             <ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-mist-400" />
           </label>
@@ -183,7 +183,7 @@ export default function Accounts() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="搜索备注或 ID"
+              placeholder="Tìm theo ghi chú hoặc ID"
               className="h-10 w-[200px] rounded-xl border border-white/[0.07] bg-[#121726] pl-9 pr-3 text-[12.5px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
             />
           </label>
@@ -199,18 +199,18 @@ export default function Accounts() {
         <div className="panel">
           <Empty
             icon={KeyRound}
-            title="账号池是空的"
-            desc="导入至少一个 muse.ai 账号才能开始生成"
+            title="Kho tài khoản đang trống"
+            desc="Nhập ít nhất một tài khoản muse.ai để bắt đầu tạo"
             action={
               <div className="flex gap-2">
-                <Button onClick={() => setBindOpen(true)}><Link2 size={14} /> 一键绑定</Button>
-                <Button variant="outline" onClick={() => setOpen(true)}><Plus size={14} /> 粘贴 Cookie</Button>
+                <Button onClick={() => setBindOpen(true)}><Link2 size={14} /> Liên kết một chạm</Button>
+                <Button variant="outline" onClick={() => setOpen(true)}><Plus size={14} /> Dán Cookie</Button>
               </div>
             }
           />
         </div>
       ) : shown.length === 0 ? (
-        <p className="py-16 text-center text-[13px] text-mist-400">没有符合筛选条件的账号</p>
+        <p className="py-16 text-center text-[13px] text-mist-400">Không có tài khoản nào khớp bộ lọc</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {shown.map((a) => (
@@ -218,8 +218,8 @@ export default function Accounts() {
               key={a.id}
               a={a}
               busy={busyId === a.id}
-              onTest={() => act(a.id, api.testAccount, '检测完成')}
-              onKeepalive={() => act(a.id, api.keepaliveAccount, '已尝试续期')}
+              onTest={() => act(a.id, api.testAccount, 'Kiểm tra xong')}
+              onKeepalive={() => act(a.id, api.keepaliveAccount, 'Đã thử gia hạn')}
               onRemove={() => remove(a)}
               onQuota={() => refreshQuota(a)}
             />
@@ -227,7 +227,7 @@ export default function Accounts() {
         </div>
       )}
 
-      <p className="mt-5 text-center text-[11.5px] text-ink-500">共 {list.length} 个账户 · 多账号自动轮转</p>
+      <p className="mt-5 text-center text-[11.5px] text-ink-500">Tổng {list.length} tài khoản · Tự động luân chuyển nhiều tài khoản</p>
 
       <ImportModal
         open={open}
@@ -267,7 +267,7 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
           <p className="truncate text-[15px] font-semibold text-white" title={a.label}>{a.label}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge tone={st.tone} dot>{st.label}</Badge>
-            {a.shared && <Badge tone="brand">公共池</Badge>}
+            {a.shared && <Badge tone="brand">Kho chung</Badge>}
           </div>
         </div>
         <span className="font-mono text-[10px] text-ink-500" title={a.upstreamId}>
@@ -280,10 +280,10 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
           <>
             <div className="flex items-baseline justify-between">
               <span className="text-[12.5px] text-mist-300">
-                周额度 <b className="ml-1 text-[18px] font-semibold text-brand-300">{left}%</b>
+                Hạn mức tuần <b className="ml-1 text-[18px] font-semibold text-brand-300">{left}%</b>
                 <span className="text-mist-400"> / 100%</span>
               </span>
-              <button onClick={onQuota} disabled={busy} title="刷新额度" className="text-mist-400 hover:text-brand-300 disabled:opacity-40">
+              <button onClick={onQuota} disabled={busy} title="Làm mới hạn mức" className="text-mist-400 hover:text-brand-300 disabled:opacity-40">
                 <RefreshCw size={12} />
               </button>
             </div>
@@ -301,10 +301,10 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
           <>
             <div className="flex items-baseline justify-between">
               <span className="text-[12.5px] text-mist-300">
-                周额度 <b className="ml-1 text-[18px] font-semibold text-mist-400">—</b>
+                Hạn mức tuần <b className="ml-1 text-[18px] font-semibold text-mist-400">—</b>
               </span>
               <button onClick={onQuota} disabled={busy} className="text-[12px] text-brand-400 hover:text-brand-300 disabled:opacity-50">
-                {busy ? '查询中…' : '点此查询'}
+                {busy ? 'Đang tra cứu…' : 'Bấm để tra cứu'}
               </button>
             </div>
             <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]" />
@@ -312,28 +312,28 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
         )}
         <p className="mt-2.5 flex flex-wrap gap-x-3 text-[11.5px] text-mist-400">
           <span>
-            有效期至{' '}
+            Hiệu lực đến{' '}
             <span className={clsx('font-mono', expiring ? 'text-amber-300' : 'text-mist-300')}>
-              {a.expiresAt ? new Date(a.expiresAt * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+              {a.expiresAt ? new Date(a.expiresAt * 1000).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
             </span>
           </span>
-          {a.quota?.weeklyReset && <span>{a.quota.weeklyReset} 重置</span>}
-          {a.quota?.tokensLeft && <span>额外 {a.quota.tokensLeft} tokens</span>}
+          {a.quota?.weeklyReset && <span>Đặt lại vào {a.quota.weeklyReset}</span>}
+          {a.quota?.tokensLeft && <span>Thêm {a.quota.tokensLeft} tokens</span>}
         </p>
         {a.note && <p className="mt-1 truncate text-[11px] text-ink-500" title={a.note}>{a.note}</p>}
       </div>
 
       <div className="mt-4 flex items-center gap-2">
         <Button variant="soft" size="sm" loading={busy} onClick={onTest}>
-          {!busy && <ShieldCheck size={13} />} 检测
+          {!busy && <ShieldCheck size={13} />} Kiểm tra
         </Button>
         <Button variant="soft" size="sm" disabled={busy} onClick={onKeepalive}>
-          <Activity size={13} /> 保活
+          <Activity size={13} /> Duy trì
         </Button>
         <button
           onClick={onRemove}
           disabled={busy}
-          title="删除"
+          title="Xóa"
           className="ml-auto grid h-8 w-8 place-items-center rounded-xl border border-rose-500/25 text-rose-400 transition hover:bg-rose-500/10 disabled:opacity-40"
         >
           <Trash2 size={14} />
@@ -402,26 +402,26 @@ function BindDrawer({ open, onClose, onDone }) {
       setCopied(key);
       setTimeout(() => setCopied(''), 1600);
     } catch {
-      toast('复制失败，请手动选中', 'error');
+      toast('Sao chép thất bại, hãy chọn thủ công', 'error');
     }
   };
 
   const steps = [
-    ['复制绑定链接', '复制下方链接（或绑定码）'],
-    ['打开已登录 muse.ai 的浏览器', '确保该浏览器已安装 Muse 浏览器扩展'],
-    ['在该浏览器中打开链接', '扩展会自动读取登录态并提交'],
-    ['等待完成', '本页自动检测，绑定成功后账号进入账号池'],
+    ['Sao chép liên kết', 'Sao chép liên kết bên dưới (hoặc mã liên kết)'],
+    ['Mở trình duyệt đã đăng nhập muse.ai', 'Đảm bảo trình duyệt đó đã cài tiện ích trình duyệt Muse'],
+    ['Mở liên kết trong trình duyệt đó', 'Tiện ích sẽ tự đọc trạng thái đăng nhập và gửi đi'],
+    ['Chờ hoàn tất', 'Trang này tự phát hiện, sau khi liên kết thành công tài khoản sẽ vào kho tài khoản'],
   ];
 
   return (
-    <Drawer open={open} onClose={onClose} title="一键绑定流程" subtitle="通过绑定链接快速绑定账号，免 F12 找 Cookie">
+    <Drawer open={open} onClose={onClose} title="Quy trình liên kết một chạm" subtitle="Liên kết tài khoản nhanh bằng liên kết, không cần tìm Cookie bằng F12">
       <div className="space-y-5">
         {/* 绑定码 */}
         <div className="panel p-4">
-          <p className="mb-2.5 text-[13px] font-medium text-mist-100">绑定授权码</p>
+          <p className="mb-2.5 text-[13px] font-medium text-mist-100">Mã ủy quyền liên kết</p>
           {status === 'creating' && (
             <div className="flex items-center gap-2 py-3 text-[12.5px] text-mist-400">
-              <Loader2 size={14} className="animate-spin text-brand-400" /> 正在生成绑定码…
+              <Loader2 size={14} className="animate-spin text-brand-400" /> Đang tạo mã liên kết…
             </div>
           )}
           {code && (
@@ -432,7 +432,7 @@ function BindDrawer({ open, onClose, onDone }) {
                 </span>
                 <button
                   onClick={() => copy(code.code, 'code')}
-                  title="复制绑定码"
+                  title="Sao chép mã liên kết"
                   className="grid w-11 place-items-center border-l border-white/[0.07] text-mist-300 hover:bg-white/5 hover:text-white"
                 >
                   {copied === 'code' ? <CheckCircle2 size={15} className="text-brand-400" /> : <Copy size={15} />}
@@ -446,7 +446,7 @@ function BindDrawer({ open, onClose, onDone }) {
                   {copied === 'link' ? <CheckCircle2 size={13} /> : <Copy size={13} />}
                 </Button>
                 <a href={link} target="_blank" rel="noreferrer">
-                  <Button size="sm" className="h-9">打开</Button>
+                  <Button size="sm" className="h-9">Mở</Button>
                 </a>
               </div>
             </>
@@ -454,27 +454,27 @@ function BindDrawer({ open, onClose, onDone }) {
 
           {status === 'waiting' && (
             <p className="mt-3 flex items-center gap-2 text-[12px] text-mist-400">
-              <Loader2 size={13} className="animate-spin text-brand-400" /> 等待扩展提交…打开链接后会自动完成
+              <Loader2 size={13} className="animate-spin text-brand-400" /> Đang chờ tiện ích gửi… Mở liên kết xong sẽ tự hoàn tất
             </p>
           )}
           {status === 'done' && (
             <p className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-[12.5px] text-emerald-300">
-              <CheckCircle2 size={14} /> 绑定成功，账号已进入你的账号池
+              <CheckCircle2 size={14} /> Liên kết thành công, tài khoản đã vào kho tài khoản của bạn
             </p>
           )}
           {status === 'expired' && (
             <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-[12.5px] text-amber-200">
-              绑定码已过期，关闭面板后重新点「一键绑定」
+              Mã liên kết đã hết hạn, đóng bảng rồi bấm «Liên kết một chạm» lại
             </p>
           )}
           {status === 'error' && (
-            <p className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-300">{err || '生成绑定码失败'}</p>
+            <p className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-300">{err || 'Tạo mã liên kết thất bại'}</p>
           )}
         </div>
 
         {/* 操作步骤 */}
         <div>
-          <p className="mb-3 text-[13px] font-medium text-mist-100">操作步骤</p>
+          <p className="mb-3 text-[13px] font-medium text-mist-100">Các bước thực hiện</p>
           <ol className="relative space-y-4">
             <span className="absolute bottom-3 left-[11px] top-3 w-px bg-white/[0.07]" />
             {steps.map(([t, d], i) => (
@@ -493,24 +493,24 @@ function BindDrawer({ open, onClose, onDone }) {
 
         {/* 扩展安装 */}
         <div className="panel p-4">
-          <p className="text-[13px] font-medium text-mist-100">没有安装扩展？</p>
+          <p className="text-[13px] font-medium text-mist-100">Chưa cài tiện ích?</p>
           <div className="mt-3 flex items-start gap-3 rounded-xl border border-white/[0.06] bg-[#0d111c] p-3">
             <Download size={18} className="mt-0.5 shrink-0 text-mist-300" />
             <div className="text-[11.5px] leading-relaxed text-mist-400">
-              <p className="text-[12.5px] font-medium text-mist-100">下载 Muse 浏览器扩展</p>
-              解压后在 <code className="rounded bg-white/5 px-1">chrome://extensions</code> 打开「开发者模式」→「加载已解压的扩展程序」。支持 Chrome / Edge。
+              <p className="text-[12.5px] font-medium text-mist-100">Tải tiện ích trình duyệt Muse</p>
+              Giải nén rồi vào <code className="rounded bg-white/5 px-1">chrome://extensions</code> bật «Chế độ nhà phát triển» → «Tải tiện ích đã giải nén». Hỗ trợ Chrome / Edge.
             </div>
           </div>
           <a href="/download/museapi-video-extension.zip" download className="mt-3 block">
             <Button variant="outline" className="w-full border-brand-400/40 text-brand-300 hover:border-brand-400/70">
-              立即下载 <ExternalLink size={13} />
+              Tải ngay <ExternalLink size={13} />
             </Button>
           </a>
         </div>
 
         <p className="flex items-start gap-2 text-[11.5px] leading-relaxed text-mist-400">
           <Lock size={13} className="mt-0.5 shrink-0" />
-          绑定码约 20 分钟内有效，请尽快使用。此操作只读取 muse.ai 登录态，不会获取你的密码。
+          Mã liên kết hiệu lực khoảng 20 phút, hãy dùng sớm. Thao tác này chỉ đọc trạng thái đăng nhập muse.ai, không lấy mật khẩu của bạn.
         </p>
       </div>
     </Drawer>
@@ -528,19 +528,19 @@ function ImportModal({ open, onClose, onDone }) {
       const t = await navigator.clipboard.readText();
       if (t) setCookie(t.trim());
     } catch {
-      toast('浏览器不允许读剪贴板，请手动粘贴', 'error');
+      toast('Trình duyệt không cho phép đọc clipboard, hãy dán thủ công', 'error');
     }
   };
 
   const submit = async () => {
-    if (cookie.trim().length < 10) return toast('请粘贴 Cookie', 'error');
+    if (cookie.trim().length < 10) return toast('Hãy dán Cookie', 'error');
     setBusy(true);
     try {
       const out = await api.importAccount({ label: label.trim() || undefined, cookie: cookie.trim() });
       if (out.essentialMissing?.length) {
-        toast(`导入成功，但缺少 ${out.essentialMissing.join(', ')}，可能无法生成`, 'error');
+        toast(`Nhập thành công nhưng thiếu ${out.essentialMissing.join(', ')}, có thể không tạo được`, 'error');
       } else {
-        toast('账号已入库', 'ok');
+        toast('Tài khoản đã được lưu vào', 'ok');
       }
       setLabel(''); setCookie('');
       onDone();
@@ -552,34 +552,34 @@ function ImportModal({ open, onClose, onDone }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="粘贴 Cookie 导入">
+    <Modal open={open} onClose={onClose} title="Nhập bằng cách dán Cookie">
       <div className="space-y-3.5">
-        <Field label="备注名" hint="方便区分多个账号，可留空">
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="比如：主号 / 小号A" />
+        <Field label="Tên ghi chú" hint="Để phân biệt nhiều tài khoản, có thể để trống">
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ví dụ: Tài khoản chính / Tài khoản phụ A" />
         </Field>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[13px] font-medium text-mist-300">Cookie</span>
             <button onClick={paste} className="flex items-center gap-1 text-[11.5px] text-brand-400 hover:text-brand-300">
-              <ClipboardPaste size={11} /> 读剪贴板
+              <ClipboardPaste size={11} /> Đọc clipboard
             </button>
           </div>
           <Textarea
             rows={6}
             value={cookie}
             onChange={(e) => setCookie(e.target.value)}
-            placeholder={'hatch_sess=eyJhbGciOi...; hatch_vml=...; 其他项'}
+            placeholder={'hatch_sess=eyJhbGciOi...; hatch_vml=...; các mục khác'}
             className="font-mono text-[11.5px]"
           />
           <p className="mt-1 text-[11px] text-ink-500">
-            必须包含 <code className="rounded bg-ink-800 px-1">hatch_sess</code>。整段粘贴即可，多余的换行会自动清理。
+            Bắt buộc phải có <code className="rounded bg-ink-800 px-1">hatch_sess</code>. Dán toàn bộ đoạn là được, các dòng thừa sẽ tự được dọn.
           </p>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" onClick={onClose}>取消</Button>
-          <Button onClick={submit} loading={busy}>导入</Button>
+          <Button variant="outline" onClick={onClose}>Hủy</Button>
+          <Button onClick={submit} loading={busy}>Nhập</Button>
         </div>
       </div>
     </Modal>
