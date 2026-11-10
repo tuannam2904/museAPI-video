@@ -54,7 +54,12 @@ export default function Canvas() {
   const [vpSize, setVpSize] = useState({ w: 800, h: 500 });
 
   const viewportRef = useRef(null);
-  const dragRef = useRef(null); // { mode:'pan'|'node', ... }
+  const dragRef = useRef(null); // { mode:'pan'|'node'|'link', ... }
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const [linkDrag, setLinkDrag] = useState(null); // { from, side, x, y } — đầu tạm của đường nối đang kéo
   const bootRef = useRef(false);
 
   // 首次进入默认选中第一个节点（对齐原站的高亮态）
@@ -78,9 +83,10 @@ export default function Canvas() {
   const screenToCanvas = (clientX, clientY) => {
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
+    const v = viewRef.current;
     return {
-      x: (clientX - rect.left - view.x) / view.z,
-      y: (clientY - rect.top - view.y) / view.z,
+      x: (clientX - rect.left - v.x) / v.z,
+      y: (clientY - rect.top - v.y) / v.z,
     };
   };
 
@@ -151,10 +157,29 @@ export default function Canvas() {
     }
   };
 
+  // Bắt đầu kéo nối từ chấm tròn của nút (chuột lẫn cảm ứng)
+  const onPortDown = (e, node, side) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.button === 2) return;
+    dragRef.current = { mode: 'link', from: node.id };
+    setLinkDrag({
+      from: node.id,
+      side,
+      x: side === 'left' ? node.x : node.x + NODE_W,
+      y: node.y + nodeH(node) / 2,
+    });
+  };
+
   useEffect(() => {
     const onMove = (e) => {
       const d = dragRef.current;
       if (!d) return;
+      if (d.mode === 'link') {
+        const p = screenToCanvas(e.clientX, e.clientY);
+        setLinkDrag((prev) => (prev ? { ...prev, x: p.x, y: p.y } : prev));
+        return;
+      }
       const dx = e.clientX - d.startX;
       const dy = e.clientY - d.startY;
 
@@ -175,14 +200,44 @@ export default function Canvas() {
         }));
       }
     };
-    const onUp = () => { dragRef.current = null; };
+    const onUp = (e) => {
+      const d = dragRef.current;
+      dragRef.current = null;
+      if (!d || d.mode !== 'link') return;
+      setLinkDrag(null);
+      if (!e || e.clientX == null) return;
+      const cur = docRef.current;
+      const p = screenToCanvas(e.clientX, e.clientY);
+      const target = cur.nodes.find(
+        (n) => n.id !== d.from && p.x >= n.x && p.x <= n.x + NODE_W && p.y >= n.y && p.y <= n.y + nodeH(n)
+      );
+      if (!target) return;
+      const src = cur.nodes.find((n) => n.id === d.from);
+      if (!src) return;
+      // Nối theo chiều trái -> phải để đường cong hiển thị đúng
+      const from = target.x >= src.x ? src.id : target.id;
+      const to = target.x >= src.x ? target.id : src.id;
+      const exists = (cur.links || []).some(
+        (l) => (l.from === from && l.to === to) || (l.from === to && l.to === from)
+      );
+      if (exists) {
+        toast('Hai nút này đã nối với nhau', 'error');
+        return;
+      }
+      setDoc((prev) => ({ ...prev, links: [...(prev.links || []), { from, to }] }));
+      toast('Đã nối 2 nút', 'ok');
+    };
+    const onCancel = () => {
+      dragRef.current = null;
+      setLinkDrag(null);
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointercancel', onCancel);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('pointercancel', onCancel);
     };
   }, [view.z]);
 
@@ -389,6 +444,21 @@ export default function Canvas() {
                   />
                 );
               })}
+              {linkDrag && nodeById[linkDrag.from] && (() => {
+                const a = nodeById[linkDrag.from];
+                const x1 = linkDrag.side === 'left' ? a.x : a.x + NODE_W;
+                const y1 = a.y + nodeH(a) / 2;
+                const mx = (x1 + linkDrag.x) / 2;
+                return (
+                  <path
+                    d={`M${x1},${y1} C${mx},${y1} ${mx},${linkDrag.y} ${linkDrag.x},${linkDrag.y}`}
+                    fill="none"
+                    stroke="rgba(79,227,193,.9)"
+                    strokeWidth="1.5"
+                    strokeDasharray="5 5"
+                  />
+                );
+              })()}
             </svg>
 
             {doc.nodes.map((n) => (
@@ -397,6 +467,7 @@ export default function Canvas() {
                 node={n}
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
+                onPortDown={(e) => onPortDown(e, n)}
                 onDoubleClick={() => {
                   const t = window.prompt('Văn bản của nút', n.text || '');
                   if (t != null) setDoc((d) => ({ ...d, nodes: d.nodes.map((x) => x.id === n.id ? { ...x, text: t } : x) }));
@@ -430,7 +501,7 @@ export default function Canvas() {
         </div>
 
         <span className="pointer-events-none absolute right-4 top-5 z-20 hidden font-mono text-[10px] text-mist-400/70 xl:block">
-          Lăn chuột để thu phóng · Kéo bằng nút giữa/phím cách/bàn tay · Shift để chọn nhiều · Nhấp đúp để sửa
+          Lăn chuột để thu phóng · Kéo bằng nút giữa/phím cách/bàn tay · Shift để chọn nhiều · Nhấp đúp để sửa · Kéo chấm tròn để nối nút
         </span>
 
         {/* 小地图 */}
@@ -562,7 +633,7 @@ function Minimap({ nodes, view, vp }) {
   );
 }
 
-function CanvasNode({ node, active, onPointerDown, onDoubleClick }) {
+function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -578,12 +649,13 @@ function CanvasNode({ node, active, onPointerDown, onDoubleClick }) {
       style={{ left: node.x, top: node.y, width: NODE_W }}
       className={clsx('glass-node absolute touch-none cursor-grab p-3.5 active:cursor-grabbing', active && 'is-active')}
     >
-      {/* 连接点 */}
-      {['-left-[7px]', '-right-[7px]'].map((pos) => (
+      {/* 连接点 — kéo từ chấm tròn để nối sang nút khác */}
+      {['-left-[8px]', '-right-[8px]'].map((pos) => (
         <span
           key={pos}
+          onPointerDown={(e) => onPortDown(e, node, pos.startsWith('-left') ? 'left' : 'right')}
           className={clsx(
-            'absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 bg-[#0d111c]',
+            "absolute top-1/2 h-4 w-4 -translate-y-1/2 cursor-crosshair rounded-full border-2 bg-[#0d111c] before:absolute before:-inset-2 before:content-['']",
             active ? 'border-brand-400' : 'border-mist-400/60',
             pos
           )}
