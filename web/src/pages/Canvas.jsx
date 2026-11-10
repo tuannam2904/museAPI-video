@@ -12,7 +12,12 @@ const STORE_KEY = 'xm_canvas_v1';
 
 const NODE_W = 260;
 const NODE_H = 170;
-const nodeH = (n) => (n.type === 'text' ? 150 : 210);
+// Chiều cao THẬT của node khi render (padding 28 + header ~20 + nội dung + footer ~17 + viền 2):
+// text: nội dung cố định 96px (min-h 76 + py 20, giới hạn 4 dòng) → ≈ 182px
+// ảnh/video: media cố định 128px → ≈ 214px.
+// Đường nối vẽ ở nodeH/2, chấm tròn ở top-1/2 của node thật, nên 2 số này
+// phải khớp nhau thì đường mới chạm đúng tâm chấm tròn.
+const nodeH = (n) => (n.type === 'text' ? 182 : 214);
 
 let seq = 1;
 const newId = () => `n_${Date.now().toString(36)}_${seq++}`;
