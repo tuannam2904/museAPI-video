@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
 import {
   X, Type, Image as ImageIcon, Video, Sparkles, Loader2, Trash2, Upload, Unlink, Wand2,
+  Check, Layers,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useToast } from './ui.jsx';
 import { api } from '../lib/api.js';
+import { getCanvasTheme } from '../lib/canvas-theme.js';
 
 const ASSIST_SYSTEM = 'Bạn là trợ lý viết prompt cho công cụ tạo video và ảnh AI. Người dùng mô tả ý tưởng bằng tiếng Việt. Nhiệm vụ của bạn: viết lại thành một prompt chi tiết, sinh động, sẵn sàng dùng để tạo video/ảnh. Chỉ trả về duy nhất nội dung prompt, không giải thích, không thêm tiêu đề hay dấu ngoặc kép bao quanh. Prompt viết bằng tiếng Việt.';
 
@@ -20,11 +22,13 @@ const DURATIONS = [5, 8, 10];
      của các nút nối VÀO nó làm tham chiếu (nhiều nút ảnh cùng nối vào 1 nút video được). */
 export default function NodeInspector({
   node, inputs, busy, style, onClose, onUpdate, onGenerate, onUpload, onDelete, onRemoveLink,
+  onToggleInput, onSizeChange,
 }) {
   const toast = useToast();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [assisting, setAssisting] = useState(false);
+  const theme = getCanvasTheme();
 
   if (!node) return null;
 
@@ -79,8 +83,12 @@ export default function NodeInspector({
 
   return (
     <div
-      style={style}
-      className="absolute z-30 rounded-2xl border border-brand-400/30 bg-[#121726]/95 p-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,.9)] backdrop-blur-xl"
+      style={{
+        ...style,
+        backgroundColor: theme.node.panelOverlay,
+        borderColor: `color-mix(in srgb, ${theme.node.activeStroke} 30%, transparent)`,
+      }}
+      className="absolute z-30 rounded-2xl border p-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,.9)] backdrop-blur-xl"
       onPointerDown={(e) => e.stopPropagation()}
     >
       {/* Đầu: tên nút + trạng thái + đóng */}
@@ -143,7 +151,7 @@ export default function NodeInspector({
             {(isImage ? IMAGE_SIZES : VIDEO_SIZES).map((sz) => (
               <button
                 key={sz}
-                onClick={() => onUpdate({ size: sz })}
+                onClick={() => (onSizeChange ? onSizeChange(sz) : onUpdate({ size: sz }))}
                 className={clsx((node.size || (isImage ? '1:1' : '16:9')) === sz && 'on')}
                 style={{ minWidth: 0, padding: '3px 10px', fontSize: 11 }}
               >
@@ -157,28 +165,45 @@ export default function NodeInspector({
         </div>
       )}
 
-      {/* Đầu vào (chỉ nút ảnh/video): ảnh tham chiếu nối vào */}
+      {/* Đầu vào (chỉ nút ảnh/video): ảnh tham chiếu nối vào.
+          Mỗi đầu vào có nút bật/tắt riêng (lưu trên nút này, hoàn tác được);
+          đầu vào bị tắt thì lúc tạo sẽ bỏ qua. */}
       {!isText && inputs.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] text-mist-400">Vào ({inputs.length}):</span>
-          {inputs.map((n) => (
-            <span key={n.id} className="group relative inline-flex items-center">
-              {n.type === 'image' && n.mediaUrl ? (
-                <img src={n.mediaUrl} alt="" className="h-7 w-9 rounded-md object-cover ring-1 ring-white/10" />
-              ) : (
-                <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10">
-                  <Type size={11} className="text-brand-400" />
-                </span>
-              )}
-              <button
-                onClick={() => onRemoveLink(n.id)}
-                title="Gỡ kết nối này"
-                className="absolute -right-1 -top-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-ink-800 text-mist-400 ring-1 ring-white/20 hover:text-rose-400"
-              >
-                <Unlink size={8} />
-              </button>
-            </span>
-          ))}
+          {inputs.map((n) => {
+            const off = (node.disabledInputs || []).includes(n.id);
+            return (
+              <span key={n.id} className={clsx('group relative inline-flex items-center', off && 'opacity-40')}>
+                {n.type === 'group' ? (
+                  <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10" title={n.label || 'Nhóm'}>
+                    <Layers size={11} className="text-brand-400" />
+                  </span>
+                ) : n.type === 'image' && n.mediaUrl ? (
+                  <img src={n.mediaUrl} alt="" className="h-7 w-9 rounded-md object-cover ring-1 ring-white/10" />
+                ) : (
+                  <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10">
+                    <Type size={11} className="text-brand-400" />
+                  </span>
+                )}
+                <button
+                  onClick={() => onToggleInput?.(n.id)}
+                  title="Bật/Tắt đầu vào này"
+                  aria-label="Bật/Tắt đầu vào này"
+                  className="absolute -bottom-1 -left-1 grid h-4 w-4 place-items-center rounded-full bg-ink-800 text-mist-300 ring-1 ring-white/20 hover:text-white"
+                >
+                  {off ? <X size={8} /> : <Check size={8} className="text-brand-400" />}
+                </button>
+                <button
+                  onClick={() => onRemoveLink(n.id)}
+                  title="Gỡ kết nối này"
+                  className="absolute -right-1 -top-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-ink-800 text-mist-400 ring-1 ring-white/20 hover:text-rose-400"
+                >
+                  <Unlink size={8} />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
       {!isText && inputs.length === 0 && (

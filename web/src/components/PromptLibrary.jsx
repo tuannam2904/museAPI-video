@@ -7,7 +7,7 @@ import { useToast } from './ui.jsx';
 /* Thư viện prompt Muse Video — 204 mẫu, đồng bộ từ
    github.com/apimodels/muse-video-prompts (CC-BY-4.0).
    Tìm kiếm + lọc theo 13 nhóm; bấm "Dùng prompt này" để đưa vào Canvas. */
-export default function PromptLibrary({ open, onClose, onUse }) {
+export default function PromptLibrary({ open, onClose, onUse, embedded = false }) {
   const toast = useToast();
   const [prompts, setPrompts] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -18,13 +18,13 @@ export default function PromptLibrary({ open, onClose, onUse }) {
   const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
-    if (!open || prompts) return;
+    if ((!open && !embedded) || prompts) return;
     setLoading(true);
     api.prompts()
       .then((d) => setPrompts(d.prompts || []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [open, prompts]);
+  }, [open, embedded, prompts]);
 
   const categories = useMemo(() => {
     if (!prompts) return [];
@@ -43,7 +43,7 @@ export default function PromptLibrary({ open, onClose, onUse }) {
     });
   }, [prompts, query, cat]);
 
-  if (!open) return null;
+  if (!open && !embedded) return null;
 
   const copyText = async (p) => {
     try {
@@ -56,10 +56,11 @@ export default function PromptLibrary({ open, onClose, onUse }) {
     }
   };
 
-  return (
+  // Nội dung dùng chung cho cả drawer độc lập và chế độ nhúng (embedded):
+  // embedded thì bỏ khung drawer/nền mờ và bỏ tiêu đề (bảng bên đã có tiêu đề/tab).
+  const body = (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[480px] flex-col border-l border-white/[0.06] bg-ink-900/95 backdrop-blur-xl fade-in">
+      {!embedded && (
         <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-3.5">
           <BookOpen size={16} className="text-brand-400" />
           <h2 className="flex-1 text-[15px] font-semibold text-white">Thư viện prompt</h2>
@@ -68,6 +69,7 @@ export default function PromptLibrary({ open, onClose, onUse }) {
             <X size={16} />
           </button>
         </div>
+      )}
 
         <div className="shrink-0 space-y-2 border-b border-white/[0.06] px-4 py-3">
           <div className="relative">
@@ -167,6 +169,18 @@ export default function PromptLibrary({ open, onClose, onUse }) {
             );
           })}
         </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>;
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[480px] flex-col border-l border-white/[0.06] bg-ink-900/95 backdrop-blur-xl fade-in">
+        {body}
       </div>
     </>
   );
