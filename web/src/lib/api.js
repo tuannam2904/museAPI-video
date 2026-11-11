@@ -93,6 +93,7 @@ export const api = {
 
   chatModels: () => request('/api/chat/models'),
   chat: (b) => request('/api/chat', { method: 'POST', body: b }),
+  prompts: () => request('/api/prompts'),
 
   membership: () => request('/api/membership'),
   subscribe: (plan) => request('/api/membership', { method: 'POST', body: { plan } }),
