@@ -10,8 +10,6 @@ import { useToast } from '../components/ui.jsx';
 import NodeInspector from '../components/NodeInspector.jsx';
 
 const STORE_KEY = 'xm_canvas_v1';
-const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
-const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
 const IMAGE_COST = 5;
 
 const NODE_W = 260;
@@ -55,12 +53,8 @@ export default function Canvas() {
 
   const [view, setView] = useState({ x: 0, y: 0, z: 1 });
   const [selected, setSelected] = useState([]);
-  const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(true);
-  const [duration, setDuration] = useState(5);
-  const [size, setSize] = useState('16:9');
-  const [mode, setMode] = useState('video'); // video | image
   const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
   const [tool, setTool] = useState('select'); // select | hand
   const [vpSize, setVpSize] = useState({ w: 800, h: 500 });
@@ -188,8 +182,9 @@ export default function Canvas() {
       if (multi) return sel.includes(node.id) ? sel.filter((i) => i !== node.id) : [...sel, node.id];
       return sel.includes(node.id) ? sel : [node.id];
     });
-    // Bấm vào 1 nút thì mở bảng cấu hình của nó; chọn nhiều thì đóng bảng
-    if (multi) setInspectorId(null); else setInspectorId(node.id);
+    // Chọn nhiều thì đóng bảng; bấm đơn thì mở bảng ở lúc nhả chuột (xem onUp)
+    // để kéo di chuyển nút không bật bảng lên
+    if (multi) setInspectorId(null);
     dragRef.current = {
       mode: 'node',
       id: node.id,
@@ -256,7 +251,14 @@ export default function Canvas() {
     const onUp = (e) => {
       const d = dragRef.current;
       dragRef.current = null;
-      if (!d || d.mode !== 'link') return;
+      if (!d) return;
+      if (d.mode === 'node') {
+        // Bấm (không kéo) vào nút thì mở bảng cấu hình; kéo di chuyển thì không mở
+        const moved = e && e.clientX != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
+        if (moved < 6) setInspectorId(d.id);
+        return;
+      }
+      if (d.mode !== 'link') return;
       setLinkDrag(null);
       if (!e || e.clientX == null) return;
       const cur = docRef.current;
@@ -420,62 +422,6 @@ export default function Canvas() {
   };
 
   /* ---------------- 生成 ---------------- */
-  const generate = async () => {
-    // Tạo nhanh từ thanh dưới: lấy câu lệnh ở ô nhập (hoặc của nút văn bản đang chọn),
-    // lấy TẤT CẢ ảnh của các nút đang chọn làm tham chiếu, nút mới nối từ mọi nút đã chọn.
-    const selNodes = doc.nodes.filter((n) => selected.includes(n.id));
-    const promptText = prompt.trim()
-      || selNodes.find((n) => n.type === 'text')?.text?.trim()
-      || '';
-    if (promptText.length < 2) return toast('Hãy nhập nội dung văn bản trước', 'error');
-    const images = selNodes.filter((n) => n.type === 'image' && n.mediaUrl).map((n) => n.mediaUrl);
-    const cost = mode === 'image' ? IMAGE_COST : 10 + 2 * duration;
-    if ((user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
-
-    const rightX = selNodes.length ? Math.max(...selNodes.map((n) => n.x)) : 0;
-    const anchorY = selNodes.length ? selNodes[0].y : 300;
-    setBusy(true);
-    try {
-      const { job } = mode === 'image'
-        ? await api.createImage({ prompt: promptText, size, images })
-        : await api.createVideo({
-          prompt: promptText,
-          duration,
-          size,
-          images,
-        });
-
-      const node = {
-        id: newId(),
-        type: mode === 'image' ? 'image' : 'video',
-        x: selNodes.length ? rightX + NODE_W + 60 : 520,
-        y: anchorY,
-        text: promptText,
-        label: mode === 'image' ? 'Hình ảnh' : 'Video',
-        size,
-        duration,
-        jobId: job.id,
-        status: 'running',
-        mediaUrl: null,
-      };
-      const newLinks = selNodes.map((n) => ({ from: n.id, to: node.id }));
-      setDoc((d) => ({
-        ...d,
-        nodes: [...d.nodes, node],
-        links: [...(d.links || []), ...newLinks],
-      }));
-      setSelected([node.id]);
-      setInspectorId(node.id);
-      setPrompt('');
-      toast('Đã gửi nút để tạo', 'ok');
-      refresh();
-    } catch (e) {
-      toast(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   /* ---------------- 任务轮询 ---------------- */
   const syncJobs = useCallback(async () => {
     const running = doc.nodes.filter((n) => n.jobId && n.status === 'running');
@@ -516,10 +462,25 @@ export default function Canvas() {
     return () => ro.disconnect();
   }, []);
 
-  const boundNode = selected.length === 1 ? doc.nodes.find((n) => n.id === selected[0]) : null;
-
   const nodeById = Object.fromEntries(doc.nodes.map((n) => [n.id, n]));
   const links = (doc.links || []).filter((l) => nodeById[l.from] && nodeById[l.to]);
+
+  // Vị trí bảng cấu hình nhỏ: nổi ngay bên dưới nút đang chọn (tính theo màn hình,
+  // không theo canvas nên không bị thu nhỏ khi zoom); gần mép dưới thì lật lên trên nút.
+  const inspectorNode = inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null;
+  const panelStyle = inspectorNode ? (() => {
+    const PANEL_W = 280;
+    const PANEL_H = 260;
+    const vw = vpSize.w;
+    const vh = vpSize.h;
+    const nx = inspectorNode.x * view.z + view.x;
+    const ny = inspectorNode.y * view.z + view.y;
+    const nBottom = (inspectorNode.y + nodeH(inspectorNode)) * view.z + view.y;
+    const below = nBottom + 10 + PANEL_H <= vh;
+    const top = below ? nBottom + 10 : Math.max(8, ny - 10 - PANEL_H);
+    const left = Math.max(8, Math.min(nx, vw - PANEL_W - 8));
+    return { left, top, width: PANEL_W };
+  })() : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -599,7 +560,6 @@ export default function Canvas() {
               <CanvasNode
                 key={n.id}
                 node={n}
-                mode={mode}
                 nodeRef={getNodeRef(n.id)}
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
@@ -643,103 +603,23 @@ export default function Canvas() {
         {/* 小地图 */}
         <Minimap nodes={doc.nodes} view={view} vp={vpSize} heights={nodeHeights} />
 
-        {/* 底部悬浮生成条 */}
-        <div className="absolute bottom-3 left-1/2 z-20 w-[min(760px,calc(100%-24px))] -translate-x-1/2 md:bottom-5 md:w-[min(760px,calc(100%-300px))]">
-          <div className="mb-2 flex items-center justify-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-[#121726]/90 px-3 py-1 text-[11px] text-mist-300 backdrop-blur">
-              <span className={clsx('h-1.5 w-1.5 rounded-full', selected.length ? 'bg-brand-400' : 'bg-mist-400')} />
-              {selected.length === 1
-                ? `Đã liên kết: ${boundNode?.label || ''} (kết quả tạo sẽ nối vào bên phải của nó)`
-                : selected.length > 1
-                  ? `Đã chọn ${selected.length} nút · Kết quả tạo sẽ nối từ mọi nút đã chọn`
-                  : 'Chưa liên kết nút · Kết quả sẽ đặt ở giữa canvas'}
-            </span>
-            {selected.length > 0 && (
-              <button onClick={() => { setSelected([]); setInspectorId(null); }} className="flex items-center gap-0.5 text-[11px] text-mist-400 hover:text-mist-200">
-                Hủy liên kết <X size={10} />
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-400/30 bg-[#121726]/95 p-2 shadow-[0_0_0_1px_rgba(79,227,193,.08),0_20px_50px_-20px_rgba(0,0,0,.9),0_0_40px_-18px_rgba(79,227,193,.5)] backdrop-blur-xl">
-            <div className="seg shrink-0">
-              {[['video', 'Video'], ['image', 'Ảnh']].map(([k, label]) => (
-                <button
-                  key={k}
-                  onClick={() => {
-                    setMode(k);
-                    if (k === 'video' && !VIDEO_SIZES.includes(size)) setSize('16:9');
-                    if (k === 'image' && !IMAGE_SIZES.includes(size)) setSize('1:1');
-                  }}
-                  className={clsx(mode === k && 'on')}
-                  style={{ minWidth: 0, padding: '4px 12px', fontSize: 12 }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => addNode('image')}
-              title="Thêm nút hình ảnh"
-              className="flex h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-[12.5px] text-mist-200 transition hover:bg-white/5 hover:text-white"
-            >
-              <ImagePlus size={16} /> <span className="hidden sm:inline">Thêm hình ảnh</span>
-            </button>
-            <input
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }}
-              placeholder={mode === 'image' ? 'Mô tả hình ảnh muốn tạo…' : 'Mô tả nội dung video bạn muốn tạo…'}
-              className="h-11 min-w-[140px] flex-1 basis-full rounded-xl border border-white/[0.06] bg-[#0d111c] px-3.5 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50 sm:basis-0"
-            />
-            {mode === 'video' && (
-              <select
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
-                className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
-                title="Thời lượng"
-              >
-                {[5, 8, 10].map((d) => <option key={d} value={d}>{d}s</option>)}
-              </select>
-            )}
-            <select
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
-              title="Tỉ lệ"
-            >
-              {(mode === 'image' ? IMAGE_SIZES : VIDEO_SIZES).map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <button
-              onClick={generate}
-              disabled={busy}
-              className="mint-btn flex h-11 shrink-0 items-center gap-2 rounded-xl px-5 text-[14px] font-semibold"
-            >
-              {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              {mode === 'image' ? 'Tạo ảnh' : 'Tạo'}
-            </button>
-          </div>
-        </div>
+        {/* Bảng cấu hình nhỏ: nổi ngay bên dưới nút đang chọn */}
+        {inspectorNode && panelStyle && (
+          <NodeInspector
+            node={inspectorNode}
+            inputs={nodeInputs(inspectorNode.id)}
+            busy={busy}
+            style={panelStyle}
+            onClose={() => setInspectorId(null)}
+            onUpdate={(patch) => updateNode(inspectorNode.id, patch)}
+            onGenerate={() => generateNode(inspectorNode)}
+            onUpload={async (file) => { await uploadToNode(inspectorNode, file); }}
+            onDelete={() => deleteNode(inspectorNode.id)}
+            onRemoveLink={(otherId) => removeLinkBetween(inspectorNode.id, otherId)}
+          />
+        )}
       </div>
 
-      {/* Bảng cấu hình nút: bấm vào 1 nút là hiện */}
-      <NodeInspector
-        node={inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null}
-        inputs={inspectorId ? nodeInputs(inspectorId) : []}
-        outputs={inspectorId ? nodeOutputs(inspectorId) : []}
-        busy={busy}
-        onClose={() => setInspectorId(null)}
-        onUpdate={(patch) => inspectorId && updateNode(inspectorId, patch)}
-        onGenerate={() => {
-          const n = doc.nodes.find((x) => x.id === inspectorId);
-          if (n) generateNode(n);
-        }}
-        onUpload={async (file) => {
-          const n = doc.nodes.find((x) => x.id === inspectorId);
-          if (n) await uploadToNode(n, file);
-        }}
-        onDelete={() => inspectorId && deleteNode(inspectorId)}
-        onRemoveLink={(otherId) => inspectorId && removeLinkBetween(inspectorId, otherId)}
-      />
     </div>
   );
 }
@@ -812,7 +692,7 @@ function Minimap({ nodes, view, vp, heights }) {
   );
 }
 
-function CanvasNode({ node, mode, active, onPointerDown, onPortDown, onDoubleClick, nodeRef }) {
+function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, nodeRef }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -882,7 +762,7 @@ function CanvasNode({ node, mode, active, onPointerDown, onPortDown, onDoubleCli
       <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px]">
         {isText ? (
           <span className="flex items-center gap-1.5 text-mist-400">
-            <Sparkles size={12} /> {mode === 'image' ? 'muse-image' : 'muse-video'}
+            <Sparkles size={12} /> Câu lệnh
           </span>
         ) : (
           <>
