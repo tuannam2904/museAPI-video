@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Plus, Trash2, RefreshCw, ShieldCheck, KeyRound, ClipboardPaste, ExternalLink, ChevronDown, Info,
-  Link2, Copy, CheckCircle2, Loader2, HelpCircle, Search, Activity, Download, Clipboard, Lock,
+  Link2, Copy, CheckCircle2, Loader2, HelpCircle, Search, Activity, Download, Clipboard, Lock, Globe,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
@@ -15,6 +15,18 @@ const STATUS = {
   missing: { tone: 'error', label: 'Đã xóa ở upstream' },
 };
 
+// Gộp 3 ô nhập proxy thành object gửi lên server. Trả về undefined nếu chưa nhập
+// địa chỉ máy chủ. Dán cả dạng http://user:pass@host:port vào ô máy chủ cũng được,
+// upstream sẽ tự tách tài khoản/mật khẩu ra.
+function buildProxy(server, user, pass) {
+  const s = (server || '').trim();
+  if (!s) return undefined;
+  const p = { server: s };
+  if ((user || '').trim()) p.username = user.trim();
+  if (pass) p.password = pass;
+  return p;
+}
+
 export default function Accounts() {
   const toast = useToast();
   const { user } = useAuth();
@@ -23,6 +35,7 @@ export default function Accounts() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [bindOpen, setBindOpen] = useState(false);
+  const [proxyAcc, setProxyAcc] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [guide, setGuide] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -222,6 +235,7 @@ export default function Accounts() {
               onKeepalive={() => act(a.id, api.keepaliveAccount, 'Đã thử gia hạn')}
               onRemove={() => remove(a)}
               onQuota={() => refreshQuota(a)}
+              onProxy={() => setProxyAcc(a)}
             />
           ))}
         </div>
@@ -240,6 +254,14 @@ export default function Accounts() {
         onClose={() => setBindOpen(false)}
         onDone={load}
       />
+
+      {proxyAcc && (
+        <ProxyModal
+          account={proxyAcc}
+          onClose={() => setProxyAcc(null)}
+          onDone={() => { setProxyAcc(null); load(); }}
+        />
+      )}
     </div>
   );
 }
@@ -254,7 +276,7 @@ const AVATAR_GRADS = [
 ];
 const gradFor = (id = '') => AVATAR_GRADS[[...String(id)].reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_GRADS.length];
 
-function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
+function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota, onProxy }) {
   const st = STATUS[a.status] || STATUS.unknown;
   const expiring = a.expiresAt && a.expiresAt * 1000 - Date.now() < 6 * 3600 * 1000;
   const left = a.quota?.weeklyLeftPct;
@@ -319,6 +341,7 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
           </span>
           {a.quota?.weeklyReset && <span>Đặt lại vào {a.quota.weeklyReset}</span>}
           {a.quota?.tokensLeft && <span>Thêm {a.quota.tokensLeft} tokens</span>}
+          {a.proxy?.server && <span>Proxy: {a.proxy.server}</span>}
         </p>
         {a.note && <p className="mt-1 truncate text-[11px] text-ink-500" title={a.note}>{a.note}</p>}
       </div>
@@ -329,6 +352,9 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota }) {
         </Button>
         <Button variant="soft" size="sm" disabled={busy} onClick={onKeepalive}>
           <Activity size={13} /> Duy trì
+        </Button>
+        <Button variant="soft" size="sm" disabled={busy} onClick={onProxy}>
+          <Globe size={13} /> Proxy
         </Button>
         <button
           onClick={onRemove}
@@ -521,6 +547,9 @@ function ImportModal({ open, onClose, onDone }) {
   const toast = useToast();
   const [label, setLabel] = useState('');
   const [cookie, setCookie] = useState('');
+  const [proxyServer, setProxyServer] = useState('');
+  const [proxyUser, setProxyUser] = useState('');
+  const [proxyPass, setProxyPass] = useState('');
   const [busy, setBusy] = useState(false);
 
   const paste = async () => {
@@ -536,13 +565,14 @@ function ImportModal({ open, onClose, onDone }) {
     if (cookie.trim().length < 10) return toast('Hãy dán Cookie', 'error');
     setBusy(true);
     try {
-      const out = await api.importAccount({ label: label.trim() || undefined, cookie: cookie.trim() });
+      const proxy = buildProxy(proxyServer, proxyUser, proxyPass);
+      const out = await api.importAccount({ label: label.trim() || undefined, cookie: cookie.trim(), ...(proxy ? { proxy } : {}) });
       if (out.essentialMissing?.length) {
         toast(`Nhập thành công nhưng thiếu ${out.essentialMissing.join(', ')}, có thể không tạo được`, 'error');
       } else {
         toast('Tài khoản đã được lưu vào', 'ok');
       }
-      setLabel(''); setCookie('');
+      setLabel(''); setCookie(''); setProxyServer(''); setProxyUser(''); setProxyPass('');
       onDone();
     } catch (e) {
       toast(e.message, 'error');
@@ -577,9 +607,98 @@ function ImportModal({ open, onClose, onDone }) {
           </p>
         </div>
 
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+          <p className="text-[13px] font-medium text-mist-300">
+            Proxy <span className="font-normal text-ink-500">(không bắt buộc)</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-ink-500">
+            Chỉ traffic đi muse.ai của tài khoản này mới qua proxy. Để trống là không dùng proxy.
+          </p>
+          <div className="mt-2 space-y-2">
+            <Input
+              value={proxyServer}
+              onChange={(e) => setProxyServer(e.target.value)}
+              placeholder="http://host:port hoặc socks5://host:port"
+              className="font-mono text-[12px]"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input value={proxyUser} onChange={(e) => setProxyUser(e.target.value)} placeholder="Tên đăng nhập proxy (nếu có)" />
+              <Input type="password" value={proxyPass} onChange={(e) => setProxyPass(e.target.value)} placeholder="Mật khẩu proxy (nếu có)" />
+            </div>
+            <p className="text-[11px] text-ink-500">
+              Dán cả dạng <code className="rounded bg-ink-800 px-1">http://user:pass@host:port</code> vào ô địa chỉ cũng được, hệ thống sẽ tự tách.
+            </p>
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" onClick={onClose}>Hủy</Button>
           <Button onClick={submit} loading={busy}>Nhập</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ProxyModal({ account, onClose, onDone }) {
+  const toast = useToast();
+  const [server, setServer] = useState(account?.proxy?.server || '');
+  const [user, setUser] = useState(account?.proxy?.username || '');
+  const [pass, setPass] = useState('');
+  const [busy, setBusy] = useState(false);
+  const hasProxy = !!account?.proxy?.server;
+
+  const save = async (clear) => {
+    if (!clear && !buildProxy(server, user, pass)) return toast('Nhập địa chỉ proxy', 'error');
+    setBusy(true);
+    try {
+      const proxy = clear ? null : buildProxy(server, user, pass);
+      await api.updateAccountProxy(account.id, proxy);
+      toast(clear ? 'Đã xóa proxy' : 'Đã lưu proxy — hãy bấm Kiểm tra để xác nhận', 'ok');
+      onDone();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`Proxy — ${account?.label || ''}`}>
+      <div className="space-y-3.5">
+        <p className="text-[12px] text-mist-400">
+          Chỉ traffic đi muse.ai của tài khoản này mới qua proxy. Đổi proxy sẽ đặt lại trạng thái
+          tài khoản thành chờ kiểm tra — bấm <b className="text-mist-200">Kiểm tra</b> sau khi lưu để xác nhận.
+        </p>
+        <Field label="Địa chỉ máy chủ" hint="http://host:port hoặc socks5://host:port">
+          <Input
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+            placeholder="http://host:port"
+            className="font-mono text-[12px]"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Tên đăng nhập">
+            <Input value={user} onChange={(e) => setUser(e.target.value)} placeholder="Nếu có" />
+          </Field>
+          <Field label="Mật khẩu" hint={account?.proxy?.has_password ? 'Để trống để giữ mật khẩu cũ' : undefined}>
+            <Input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Nếu có" />
+          </Field>
+        </div>
+        <p className="text-[11px] text-ink-500">
+          Dán cả dạng <code className="rounded bg-ink-800 px-1">http://user:pass@host:port</code> vào ô địa chỉ cũng được, hệ thống sẽ tự tách.
+        </p>
+        <div className="flex justify-between gap-2 pt-1">
+          <div>
+            {hasProxy && (
+              <Button variant="outline" onClick={() => save(true)} loading={busy}>Xóa proxy</Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Hủy</Button>
+            <Button onClick={() => save(false)} loading={busy}>Lưu</Button>
+          </div>
         </div>
       </div>
     </Modal>
