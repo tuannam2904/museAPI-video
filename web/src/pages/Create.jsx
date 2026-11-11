@@ -19,6 +19,9 @@ const IDEAS = [
 ];
 
 const STORE_KEY = 'xm_projects';
+const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
+const IMAGE_COST = 5;
 
 export default function Create() {
   const { user, refresh } = useAuth();
@@ -34,6 +37,7 @@ export default function Create() {
   const [prompt, setPrompt] = useState('');
   const [duration, setDuration] = useState(5);
   const [size, setSize] = useState('16:9');
+  const [mode, setMode] = useState('video');
   const [refs, setRefs] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,7 +53,13 @@ export default function Create() {
   const fileRef = useRef(null);
   const pollRef = useRef(null);
 
-  const cost = 10 + 2 * duration;
+  const cost = mode === 'image' ? IMAGE_COST : 10 + 2 * duration;
+
+  const switchMode = (m) => {
+    setMode(m);
+    if (m === 'video' && !VIDEO_SIZES.includes(size)) setSize('16:9');
+    if (m === 'image' && !IMAGE_SIZES.includes(size)) setSize('1:1');
+  };
 
   /* ---------- 项目 ---------- */
   useEffect(() => {
@@ -135,13 +145,21 @@ export default function Create() {
     if ((user?.credits ?? 0) < cost) return toast(`Không đủ điểm, lần này cần ${cost}`, 'error');
     setBusy(true);
     try {
-      await api.createVideo({
-        prompt: prompt.trim(),
-        duration,
-        size,
-        images: refs.map((r) => r.url),
-        extra: buildExtra(params),
-      });
+      if (mode === 'image') {
+        await api.createImage({
+          prompt: prompt.trim(),
+          size,
+          images: refs.map((r) => r.url),
+        });
+      } else {
+        await api.createVideo({
+          prompt: prompt.trim(),
+          duration,
+          size,
+          images: refs.map((r) => r.url),
+          extra: buildExtra(params),
+        });
+      }
       setPrompt('');
       setRefs([]);
       await loadJobs();
@@ -297,7 +315,7 @@ export default function Create() {
               <Sparkles size={22} className="text-brand-400" />
             </div>
             <h3 className="mt-4 text-[15px] font-medium text-mist-100">Mô tả khung hình ở bàn làm việc bên dưới để bắt đầu sáng tạo</h3>
-            <p className="mt-1.5 text-[12.5px] text-mist-400">Hỗ trợ tạo video từ văn bản và từ ảnh tham khảo, tiến độ tạo hiển thị trực tiếp tại đây</p>
+            <p className="mt-1.5 text-[12.5px] text-mist-400">Tạo video hoặc ảnh từ văn bản và ảnh tham khảo, tiến độ tạo hiển thị trực tiếp tại đây</p>
             <div className="mt-6 flex max-w-[640px] flex-wrap justify-center gap-2">
               {IDEAS.map((idea) => (
                 <button
@@ -322,7 +340,16 @@ export default function Create() {
       {/* ---------------- WORKBENCH ---------------- */}
       <div className="shrink-0 px-6 pb-5">
         <div className="panel p-4 shadow-[0_-20px_60px_-30px_rgba(0,0,0,.8)]">
-          <p className="eyebrow mb-3">Workbench</p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="eyebrow">Workbench</p>
+            <div className="seg">
+              {[['video', 'Video'], ['image', 'Ảnh']].map(([k, label]) => (
+                <button key={k} onClick={() => switchMode(k)} className={clsx(mode === k && 'on')} style={{ minWidth: 0, padding: '4px 14px', fontSize: 12 }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-col gap-4 lg:flex-row">
             {/* 提示词 */}
@@ -335,7 +362,7 @@ export default function Create() {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate();
                 }}
                 rows={3}
-                placeholder="Mô tả nội dung video, phong cách hoặc hình ảnh tham khảo… (Ctrl+Enter để tạo)"
+                placeholder={mode === 'image' ? 'Mô tả hình ảnh muốn tạo, phong cách, màu sắc… (Ctrl+Enter để tạo)' : 'Mô tả nội dung video, phong cách hoặc hình ảnh tham khảo… (Ctrl+Enter để tạo)'}
                 className="block w-full resize-none bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70"
               />
               <span className="pointer-events-none absolute bottom-2 right-3 font-mono text-[10.5px] text-mist-400">
@@ -383,21 +410,23 @@ export default function Create() {
 
           {/* 操作行 */}
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-            <div className="flex items-center gap-2.5">
-              <span className="text-[12.5px] text-mist-300">Thời lượng</span>
-              <div className="seg">
-                {[5, 8, 10].map((d) => (
-                  <button key={d} onClick={() => setDuration(d)} className={clsx(duration === d && 'on')}>
-                    {d}s
-                  </button>
-                ))}
+            {mode === 'video' && (
+              <div className="flex items-center gap-2.5">
+                <span className="text-[12.5px] text-mist-300">Thời lượng</span>
+                <div className="seg">
+                  {[5, 8, 10].map((d) => (
+                    <button key={d} onClick={() => setDuration(d)} className={clsx(duration === d && 'on')}>
+                      {d}s
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-center gap-2.5">
               <span className="text-[12.5px] text-mist-300">Tỉ lệ</span>
               <div className="seg">
-                {['16:9', '9:16', '1:1'].map((sz) => (
+                {(mode === 'image' ? IMAGE_SIZES : VIDEO_SIZES).map((sz) => (
                   <button key={sz} onClick={() => setSize(sz)} className={clsx(size === sz && 'on')}>
                     {sz}
                   </button>
@@ -406,34 +435,38 @@ export default function Create() {
             </div>
 
             <div className="ml-auto flex items-center gap-2.5">
-              <button
-                onClick={() => setParamsOpen(true)}
-                className={clsx(
-                  'flex h-11 items-center gap-2 rounded-xl border px-4 text-[13px] transition',
-                  buildExtra(params)
-                    ? 'border-brand-400/50 bg-brand-500/10 text-brand-300'
-                    : 'border-white/[0.08] text-mist-200 hover:border-white/20 hover:text-white'
-                )}
-              >
-                <SlidersHorizontal size={15} /> Params
-                {buildExtra(params) && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />}
-              </button>
-              <button
-                onClick={() => setQueueOpen(true)}
-                className="flex h-11 items-center gap-2 rounded-xl border border-white/[0.08] px-4 text-[13px] text-mist-200 transition hover:border-white/20 hover:text-white"
-              >
-                <Clock size={15} /> Queue
-                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white/[0.07] px-1.5 font-mono text-[10.5px]">
-                  {running}
-                </span>
-              </button>
+              {mode === 'video' && (
+                <button
+                  onClick={() => setParamsOpen(true)}
+                  className={clsx(
+                    'flex h-11 items-center gap-2 rounded-xl border px-4 text-[13px] transition',
+                    buildExtra(params)
+                      ? 'border-brand-400/50 bg-brand-500/10 text-brand-300'
+                      : 'border-white/[0.08] text-mist-200 hover:border-white/20 hover:text-white'
+                  )}
+                >
+                  <SlidersHorizontal size={15} /> Params
+                  {buildExtra(params) && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />}
+                </button>
+              )}
+              {mode === 'video' && (
+                <button
+                  onClick={() => setQueueOpen(true)}
+                  className="flex h-11 items-center gap-2 rounded-xl border border-white/[0.08] px-4 text-[13px] text-mist-200 transition hover:border-white/20 hover:text-white"
+                >
+                  <Clock size={15} /> Queue
+                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white/[0.07] px-1.5 font-mono text-[10.5px]">
+                    {running}
+                  </span>
+                </button>
+              )}
               <button
                 onClick={generate}
                 disabled={busy}
                 className="mint-btn flex h-12 items-center gap-3 rounded-2xl pl-5 pr-2 text-[16px] font-semibold"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                <span className="pr-3">Generate</span>
+                <span className="pr-3">{mode === 'image' ? 'Tạo ảnh' : 'Generate'}</span>
                 <span className="flex items-center gap-1 rounded-xl bg-[#04211a]/80 px-2.5 py-1.5 font-mono text-[12px] text-brand-300">
                   <Zap size={12} />
                   {summary?.usable ? `${summary.weeklyLeftPct ?? '—'}%` : '—'}
@@ -476,7 +509,7 @@ export default function Create() {
             </div>
             <p className="text-[13px] leading-relaxed text-mist-200">{preview.prompt}</p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-ink-500">
-              <span>{preview.params?.duration}s · {preview.params?.size}</span>
+              <span>{preview.params?.duration ? `${preview.params.duration}s · ` : ''}{preview.params?.size}</span>
               <span>{preview.cost} điểm</span>
               {preview.params?.extra && <span className="truncate">{preview.params.extra}</span>}
               <span>{fmtAgo(preview.createdAt)}</span>
@@ -571,7 +604,7 @@ function JobTile({ job, onClick }) {
       <div className="absolute inset-x-0 bottom-0 p-3.5">
         <p className="line-clamp-1 text-[15px] font-semibold text-white">{title}</p>
         <p className="mt-0.5 text-[11.5px] text-mist-300">
-          {job.params?.duration}s · {job.params?.size} · {fmtAgo(job.createdAt)}
+          {job.params?.duration ? `${job.params.duration}s · ` : ''}{job.params?.size} · {fmtAgo(job.createdAt)}
         </p>
         {running && (
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
