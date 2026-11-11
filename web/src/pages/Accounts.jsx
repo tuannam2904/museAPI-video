@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Plus, Trash2, RefreshCw, ShieldCheck, KeyRound, ClipboardPaste, ExternalLink, ChevronDown, Info,
   Link2, Copy, CheckCircle2, Loader2, HelpCircle, Search, Activity, Download, Clipboard, Lock, Globe,
+  Video, Image as ImageIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
@@ -96,14 +97,6 @@ export default function Accounts() {
     }
   };
 
-  const quotaText = (q) => {
-    if (!q) return '—';
-    if (q.weeklyLeftPct != null) return `Còn ${q.weeklyLeftPct}%`;
-    if (typeof q === 'string') return q;
-    return '—';
-  };
-  void quotaText;
-
   const shown = list.filter((a) => {
     if (statusFilter !== 'all' && (a.status || 'unknown') !== statusFilter) return false;
     if (q && !`${a.label || ''} ${a.note || ''} ${a.upstreamId || ''}`.toLowerCase().includes(q.toLowerCase())) return false;
@@ -173,6 +166,7 @@ export default function Accounts() {
               Khả dụng {summary.usable}/{summary.total}
               {summary.weeklyLeftPct != null && <> · Trung bình còn <b className="text-brand-300">{summary.weeklyLeftPct}%</b></>}
               {summary.weeklyReset && <span className="text-ink-500"> · Đặt lại vào {summary.weeklyReset}</span>}
+              {summary.totalVideos > 0 && <> · Đã tạo <b className="text-brand-300">{summary.totalVideos} video</b></>}
             </span>
           )}
         </div>
@@ -304,6 +298,7 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota, onProxy 
               <span className="text-[12.5px] text-mist-300">
                 Hạn mức tuần <b className="ml-1 text-[18px] font-semibold text-brand-300">{left}%</b>
                 <span className="text-mist-400"> / 100%</span>
+                {a.quota?.plan && <span className="ml-2 text-[11px] text-ink-500">{a.quota.plan}</span>}
               </span>
               <button onClick={onQuota} disabled={busy} title="Làm mới hạn mức" className="text-mist-400 hover:text-brand-300 disabled:opacity-40">
                 <RefreshCw size={12} />
@@ -323,16 +318,37 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota, onProxy 
           <>
             <div className="flex items-baseline justify-between">
               <span className="text-[12.5px] text-mist-300">
-                Hạn mức tuần <b className="ml-1 text-[18px] font-semibold text-mist-400">—</b>
+                Hạn mức tuần <b className="ml-1 text-[15px] font-semibold text-amber-300">Chưa đọc được</b>
               </span>
               <button onClick={onQuota} disabled={busy} className="text-[12px] text-brand-400 hover:text-brand-300 disabled:opacity-50">
                 {busy ? 'Đang tra cứu…' : 'Bấm để tra cứu'}
               </button>
             </div>
             <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]" />
+            <p className="mt-2 text-[11.5px] leading-relaxed text-mist-400">
+              Muse chưa đọc được bảng Usage của tài khoản này (phiên vẫn khả dụng).
+              Bấm «Tra cứu» để đọc lại — nếu vẫn không được thì hạn mức tuần tạm thời chưa rõ.
+            </p>
           </>
         )}
-        <p className="mt-2.5 flex flex-wrap gap-x-3 text-[11.5px] text-mist-400">
+        {/* Số lượng đã tạo bằng tài khoản này + số lần upstream đã dùng nó */}
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-mist-300">
+          <span className="flex items-center gap-1.5">
+            <Video size={13} className="text-brand-400" />
+            Đã tạo <b className="text-white">{a.videoCount ?? 0} video</b>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <ImageIcon size={13} className="text-brand-400" />
+            <b className="text-white">{a.imageCount ?? 0} ảnh</b>
+          </span>
+          {a.useCount != null && (
+            <span className="text-mist-400">
+              Upstream đã dùng <b className="text-mist-200">{a.useCount} lần</b>
+              {a.lastUsed ? ` · lần cuối ${fmtAgo(a.lastUsed * 1000)}` : ''}
+            </span>
+          )}
+        </p>
+        <p className="mt-2 flex flex-wrap gap-x-3 text-[11.5px] text-mist-400">
           <span>
             Hiệu lực đến{' '}
             <span className={clsx('font-mono', expiring ? 'text-amber-300' : 'text-mist-300')}>
@@ -341,6 +357,7 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota, onProxy 
           </span>
           {a.quota?.weeklyReset && <span>Đặt lại vào {a.quota.weeklyReset}</span>}
           {a.quota?.tokensLeft && <span>Thêm {a.quota.tokensLeft} tokens</span>}
+          {a.quota?.extraLeft && <span>Tokens thêm còn {a.quota.extraLeft}</span>}
           {a.proxy?.server && <span>Proxy: {a.proxy.server}</span>}
         </p>
         {a.note && <p className="mt-1 truncate text-[11px] text-ink-500" title={a.note}>{a.note}</p>}

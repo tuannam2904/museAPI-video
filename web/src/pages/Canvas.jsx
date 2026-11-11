@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Type, Image as ImageIcon, Video, Trash2, ZoomIn, ZoomOut, Maximize, Loader2, X, Sparkles,
   MousePointer2, Hand, ImagePlus, ChevronDown, Map as MapIcon, Expand, BookOpen, Clapperboard,
+  Download,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../store/auth.jsx';
-import { useToast } from '../components/ui.jsx';
+import { useToast, Modal } from '../components/ui.jsx';
 import NodeInspector from '../components/NodeInspector.jsx';
 import PromptLibrary from '../components/PromptLibrary.jsx';
 import StoryboardDrawer from '../components/StoryboardDrawer.jsx';
@@ -58,6 +59,9 @@ export default function Canvas() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(true);
   const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
+  const inspectorIdRef = useRef(null);
+  inspectorIdRef.current = inspectorId;
+  const [viewing, setViewing] = useState(null); // nút đang mở xem video/ảnh to
   const [libraryOpen, setLibraryOpen] = useState(false); // drawer thư viện prompt
   const [storyOpen, setStoryOpen] = useState(false); // drawer bảng phân cảnh
   const [tool, setTool] = useState('select'); // select | hand
@@ -65,6 +69,8 @@ export default function Canvas() {
 
   const viewportRef = useRef(null);
   const dragRef = useRef(null); // { mode:'pan'|'node'|'link', ... }
+  // Chụm 2 ngón để zoom (cảm ứng): { pointers: Map<id,{x,y}>, startDist, startZ, startMid, startView }
+  const pinchRef = useRef(null);
   const docRef = useRef(doc);
   docRef.current = doc;
   const viewRef = useRef(view);
@@ -189,9 +195,12 @@ export default function Canvas() {
     // Chọn nhiều thì đóng bảng; bấm đơn thì mở bảng ở lúc nhả chuột (xem onUp)
     // để kéo di chuyển nút không bật bảng lên
     if (multi) setInspectorId(null);
+    // Bấm vào ảnh/video của nút thì mở xem to (không mở bảng); bấm chỗ khác thì mở bảng
+    const fromMedia = !!e.target?.closest?.('[data-media]');
     dragRef.current = {
       mode: 'node',
       id: node.id,
+      fromMedia,
       startX: e.clientX,
       startY: e.clientY,
       nodeX: node.x,
@@ -224,7 +233,42 @@ export default function Canvas() {
   };
 
   useEffect(() => {
+    // Chụm 2 ngón (cảm ứng) để zoom: theo dõi mọi con trỏ chạm vào canvas.
+    const onDown = (e) => {
+      if (e.pointerType === 'mouse') return; // chuột chỉ có 1 con trỏ, không pinch được
+      if (!viewportRef.current?.contains(e.target)) return;
+      const pr = pinchRef.current || (pinchRef.current = { pointers: new Map() });
+      pr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pr.pointers.size === 2) {
+        const [a, b] = [...pr.pointers.values()];
+        const rect = viewportRef.current?.getBoundingClientRect();
+        pr.startDist = Math.hypot(a.x - b.x, a.y - b.y);
+        pr.startZ = viewRef.current.z;
+        pr.startMid = { x: (a.x + b.x) / 2 - (rect?.left || 0), y: (a.y + b.y) / 2 - (rect?.top || 0) };
+        pr.startView = { x: viewRef.current.x, y: viewRef.current.y };
+        // Hủy drag đang dở (kéo nút / pan / nối) để hai ngón chỉ zoom
+        dragRef.current = null;
+        setLinkDrag(null);
+      }
+    };
     const onMove = (e) => {
+      const pr = pinchRef.current;
+      if (pr && pr.pointers.has(e.pointerId)) {
+        pr.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pr.pointers.size === 2 && pr.startDist > 0) {
+          const [a, b] = [...pr.pointers.values()];
+          const rect = viewportRef.current?.getBoundingClientRect();
+          const midX = (a.x + b.x) / 2 - (rect?.left || 0);
+          const midY = (a.y + b.y) / 2 - (rect?.top || 0);
+          const dist = Math.hypot(a.x - b.x, a.y - b.y);
+          const z = Math.min(2.5, Math.max(0.25, pr.startZ * (dist / pr.startDist)));
+          // Giữ điểm canvas dưới điểm giữa hai ngón cố định, đồng thời dịch theo điểm giữa
+          const nx = midX - ((pr.startMid.x - pr.startView.x) / pr.startZ) * z;
+          const ny = midY - ((pr.startMid.y - pr.startView.y) / pr.startZ) * z;
+          setView({ x: nx, y: ny, z });
+          return;
+        }
+      }
       const d = dragRef.current;
       if (!d) return;
       if (d.mode === 'link') {
@@ -253,13 +297,25 @@ export default function Canvas() {
       }
     };
     const onUp = (e) => {
+      const pr = pinchRef.current;
+      if (pr) {
+        pr.pointers.delete(e.pointerId);
+        if (pr.pointers.size < 2) pinchRef.current = null;
+      }
       const d = dragRef.current;
       dragRef.current = null;
       if (!d) return;
       if (d.mode === 'node') {
-        // Bấm (không kéo) vào nút thì mở bảng cấu hình; kéo di chuyển thì không mở
+        // Bấm (không kéo) vào nút: bấm vào ảnh/video thì mở xem to, bấm chỗ khác mở bảng cấu hình
         const moved = e && e.clientX != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
-        if (moved < 6) setInspectorId(d.id);
+        if (moved < 6) {
+          if (d.fromMedia) {
+            const node = docRef.current.nodes.find((n) => n.id === d.id);
+            if (node?.mediaUrl) setViewing(node);
+          } else {
+            setInspectorId(d.id);
+          }
+        }
         return;
       }
       if (d.mode !== 'link') return;
@@ -286,14 +342,21 @@ export default function Canvas() {
       setDoc((prev) => ({ ...prev, links: [...(prev.links || []), { from, to }] }));
       toast('Đã nối 2 nút', 'ok');
     };
-    const onCancel = () => {
+    const onCancel = (e) => {
+      const pr = pinchRef.current;
+      if (pr) {
+        if (e?.pointerId != null) pr.pointers.delete(e.pointerId);
+        if (pr.pointers.size < 2) pinchRef.current = null;
+      }
       dragRef.current = null;
       setLinkDrag(null);
     };
+    window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
     return () => {
+      window.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
@@ -483,13 +546,17 @@ export default function Canvas() {
         try { return { id: n.id, job: (await api.job(n.jobId)).job }; } catch { return null; }
       })
     );
+    let justDone = null;
     setDoc((d) => ({
       ...d,
       nodes: d.nodes.map((n) => {
         const hit = results.find((r) => r?.id === n.id)?.job;
         if (!hit) return n;
         if (hit.status === 'completed') {
-          return { ...n, status: 'done', mediaUrl: hit.mediaUrl || hit.result?.url };
+          const done = { ...n, status: 'done', mediaUrl: hit.mediaUrl || hit.result?.url };
+          // Nút nào đang mở bảng cấu hình thì tự mở xem khi tạo xong
+          if (inspectorIdRef.current === n.id) justDone = done;
+          return done;
         }
         if (hit.status === 'failed') {
           return { ...n, status: 'failed', error: hit.error };
@@ -497,6 +564,7 @@ export default function Canvas() {
         return { ...n, progress: hit.progress };
       }),
     }));
+    if (justDone) setViewing(justDone);
   }, [doc.nodes]);
 
   useEffect(() => {
@@ -517,21 +585,26 @@ export default function Canvas() {
   const nodeById = Object.fromEntries(doc.nodes.map((n) => [n.id, n]));
   const links = (doc.links || []).filter((l) => nodeById[l.from] && nodeById[l.to]);
 
-  // Vị trí bảng cấu hình nhỏ: nổi ngay bên dưới nút đang chọn (tính theo màn hình,
-  // không theo canvas nên không bị thu nhỏ khi zoom); gần mép dưới thì lật lên trên nút.
+  // Vị trí bảng cấu hình nhỏ: nổi ngay bên dưới nút đang chọn (tính theo màn hình).
+  // Bảng phóng to theo mức zoom (giới hạn 0.7–1.5x) để không bị nhỏ đi so với nút
+  // khi zoom to — trước đây bảng cố định 280px nên zoom càng to, nút càng lớn
+  // thì bảng trông càng nhỏ. Gần mép dưới thì lật lên trên nút.
   const inspectorNode = inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null;
   const panelStyle = inspectorNode ? (() => {
     const PANEL_W = 280;
     const PANEL_H = 260;
+    const s = Math.min(1.5, Math.max(0.7, view.z)); // tỉ lệ bảng theo zoom
+    const scaledW = PANEL_W * s;
+    const scaledH = PANEL_H * s;
     const vw = vpSize.w;
     const vh = vpSize.h;
     const nx = inspectorNode.x * view.z + view.x;
     const ny = inspectorNode.y * view.z + view.y;
     const nBottom = (inspectorNode.y + nodeH(inspectorNode)) * view.z + view.y;
-    const below = nBottom + 10 + PANEL_H <= vh;
-    const top = below ? nBottom + 10 : Math.max(8, ny - 10 - PANEL_H);
-    const left = Math.max(8, Math.min(nx, vw - PANEL_W - 8));
-    return { left, top, width: PANEL_W };
+    const below = nBottom + 10 + scaledH <= vh;
+    const top = below ? nBottom + 10 : Math.max(8, ny - 10 - scaledH);
+    const left = Math.max(8, Math.min(nx, vw - scaledW - 8));
+    return { left, top, width: PANEL_W, transform: `scale(${s})`, transformOrigin: 'top left' };
   })() : null;
 
   return (
@@ -616,6 +689,7 @@ export default function Canvas() {
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
+                onView={() => setViewing(n)}
                 onDoubleClick={() => {
                   const t = window.prompt('Văn bản của nút', n.text || '');
                   if (t != null) setDoc((d) => ({ ...d, nodes: d.nodes.map((x) => x.id === n.id ? { ...x, text: t } : x) }));
@@ -637,15 +711,15 @@ export default function Canvas() {
           <ToolBtn icon={BookOpen} onClick={() => setLibraryOpen(true)} title="Thư viện prompt (204 mẫu)" />
           <ToolBtn icon={Clapperboard} onClick={() => setStoryOpen(true)} title="Bảng phân cảnh" />
           <Sep />
-          <ToolBtn icon={ZoomOut} onClick={() => zoomBy(1 / 1.15)} title="Thu nhỏ" />
+          <ToolBtn icon={ZoomOut} onClick={() => zoomBy(1 / 1.15)} title="Thu nhỏ (chụm 2 ngón trên cảm ứng)" />
           <button
             onClick={() => setView((v) => ({ ...v, z: 1 }))}
-            title="Đặt lại 100%"
+            title="Đặt lại 100% — chụm 2 ngón để zoom trên cảm ứng"
             className="flex h-9 min-w-[70px] items-center justify-center gap-1 rounded-xl border border-white/[0.06] px-2 font-mono text-[12px] text-mist-200 hover:text-white"
           >
             {Math.round(view.z * 100)}% <ChevronDown size={12} className="text-mist-400" />
           </button>
-          <ToolBtn icon={ZoomIn} onClick={() => zoomBy(1.15)} title="Phóng to" />
+          <ToolBtn icon={ZoomIn} onClick={() => zoomBy(1.15)} title="Phóng to (chụm 2 ngón trên cảm ứng)" />
           <Sep />
           <ToolBtn icon={Maximize} onClick={fitView} title="Vừa với canvas" />
           <ToolBtn icon={Trash2} onClick={removeSelected} disabled={!selected.length} danger title="Xóa mục đã chọn (Delete)" />
@@ -673,6 +747,35 @@ export default function Canvas() {
             onRemoveLink={(otherId) => removeLinkBetween(inspectorNode.id, otherId)}
           />
         )}
+
+        {/* Xem video/ảnh to của nút */}
+        <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.label || (viewing?.type === 'video' ? 'Video' : 'Hình ảnh')} width="max-w-3xl">
+          {viewing && (
+            <div className="space-y-3">
+              <div className="overflow-hidden rounded-xl bg-black/50">
+                {viewing.type === 'video' ? (
+                  <video src={viewing.mediaUrl} controls autoPlay loop className="max-h-[65vh] w-full" />
+                ) : (
+                  <img src={viewing.mediaUrl} alt="" className="max-h-[65vh] w-full object-contain" />
+                )}
+              </div>
+              {viewing.text && <p className="text-[13px] leading-relaxed text-mist-200">{viewing.text}</p>}
+              <div className="flex justify-end gap-2">
+                <a href={viewing.mediaUrl} download>
+                  <button className="flex items-center gap-1.5 rounded-lg border border-[#232a38] px-3.5 py-1.5 text-[12px] text-mist-200 hover:border-brand-500/50 hover:text-white">
+                    <Download size={13} /> Tải xuống
+                  </button>
+                </a>
+                <button
+                  onClick={() => setViewing(null)}
+                  className="rounded-lg border border-[#232a38] px-3.5 py-1.5 text-[12px] text-mist-200 hover:border-brand-500/50 hover:text-white"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
 
       {/* Thư viện prompt + Bảng phân cảnh */}
@@ -751,7 +854,7 @@ function Minimap({ nodes, view, vp, heights }) {
   );
 }
 
-function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, nodeRef }) {
+function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -795,13 +898,18 @@ function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, no
           {node.text || 'Văn bản trống, nhấp đúp để sửa'}
         </p>
       ) : (
-        <div className="relative overflow-hidden rounded-xl bg-black/40">
+        <div data-media className="relative cursor-pointer overflow-hidden rounded-xl bg-black/40" title="Bấm để xem to">
           {node.mediaUrl ? (
-            node.type === 'video' ? (
-              <video src={node.mediaUrl} muted loop playsInline autoPlay className="h-[128px] w-full object-cover" />
-            ) : (
-              <img src={node.mediaUrl} alt="" className="h-[128px] w-full object-cover" />
-            )
+            <>
+              {node.type === 'video' ? (
+                <video src={node.mediaUrl} muted loop playsInline autoPlay className="h-[128px] w-full object-cover" />
+              ) : (
+                <img src={node.mediaUrl} alt="" className="h-[128px] w-full object-cover" />
+              )}
+              <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white backdrop-blur">
+                <Expand size={13} />
+              </span>
+            </>
           ) : (
             <div className="grid h-[128px] place-items-center bg-[radial-gradient(circle_at_30%_20%,rgba(15,169,138,.14),transparent_60%)]">
               {running ? (

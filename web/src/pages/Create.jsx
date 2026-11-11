@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Sparkles, X, Loader2, RefreshCw, AlertTriangle, Image as ImageIcon, ChevronDown, Zap,
-  SlidersHorizontal, Clock, Check, Users, Bell, Trash2, Wand2,
+  SlidersHorizontal, Clock, Check, Users, Bell, Trash2, Wand2, HardDrive,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
+import { fmtCountdown, jobDeleteAt, useNow } from '../lib/mediaPolicy.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast, Modal } from '../components/ui.jsx';
 import QueueDrawer from '../components/QueueDrawer.jsx';
@@ -43,13 +44,15 @@ export default function Create() {
   const [busy, setBusy] = useState(false);
   const [assisting, setAssisting] = useState(false);
   const [jobs, setJobs] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [modelOpen, setModelOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [preview, setPreview] = useState(null);
   const [paramsOpen, setParamsOpen] = useState(false);
   const [params, setParams] = useState({ ...PARAM_DEFAULTS });
   const [summary, setSummary] = useState(null);
+  const [media, setMedia] = useState(null);
+  const [retentionDays, setRetentionDays] = useState(7);
+  const now = useNow();
 
   const fileRef = useRef(null);
   const pollRef = useRef(null);
@@ -90,10 +93,14 @@ export default function Create() {
     try {
       const out = await api.jobs({ pageSize: 18 });
       setJobs(out.jobs);
+      if (out.mediaRetentionDays) setRetentionDays(Number(out.mediaRetentionDays));
     } catch { /* ignore */ }
   }, []);
 
   useEffect(() => { loadJobs(); }, [loadJobs]);
+
+  // Dung lượng media trên server (để hiện trong banner chính sách lưu trữ).
+  useEffect(() => { api.mediaStats().then(setMedia).catch(() => {}); }, []);
 
   // 账号池额度（顶栏与底部提示共用）
   useEffect(() => {
@@ -198,10 +205,7 @@ export default function Create() {
     }
   };
 
-  const shown = jobs.filter((j) => {
-    if (filter === 'done') return j.status === 'completed';
-    return true;
-  });
+  const shown = jobs.length ? [jobs[0]] : []; // Tạo nhanh chỉ giữ video/ảnh mới nhất; toàn bộ xem ở tab Tác phẩm
 
   const clearFailed = async () => {
     const failed = jobs.filter((j) => j.status === 'failed');
@@ -217,7 +221,6 @@ export default function Create() {
   };
 
   const running = jobs.filter((j) => ['queued', 'processing'].includes(j.status)).length;
-  const activeProject = projects.find((p) => p.id === active);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -315,17 +318,9 @@ export default function Create() {
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-4">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-[14px] font-medium text-white">{activeProject?.name || 'Tất cả tác phẩm'}</h2>
-            <span className="text-[12px] text-mist-400">{shown.length}</span>
+            <h2 className="text-[16px] font-medium text-white">Mới nhất</h2>
           </div>
           <div className="flex items-center gap-2">
-            <div className="seg">
-              {[['all', 'Tất cả'], ['done', 'Đã xong']].map(([k, label]) => (
-                <button key={k} onClick={() => setFilter(k)} className={clsx(filter === k && 'on')} style={{ minWidth: 0, padding: '4px 12px', fontSize: 12 }}>
-                  {label}
-                </button>
-              ))}
-            </div>
             <button
               onClick={clearFailed}
               className="flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[12px] text-mist-400 transition hover:bg-white/5 hover:text-rose-400"
@@ -355,11 +350,24 @@ export default function Create() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-            {shown.map((j) => (
-              <JobTile key={j.id} job={j} onClick={() => setPreview(j)} />
-            ))}
-          </div>
+          <>
+            <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-2.5 text-[12px] leading-relaxed text-amber-200/90">
+              <Clock size={14} className="mt-0.5 shrink-0" />
+              <p>
+                Video và ảnh sẽ <b>tự động xóa sau {retentionDays} ngày</b> — hãy tải về nếu muốn giữ lại.
+                {media && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-mist-300">
+                    <HardDrive size={12} /> Bạn đã dùng <b className="text-mist-100">{media.totalMB} MB / {media.maxMB} MB</b>
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="grid max-w-3xl grid-cols-1 gap-4">
+              {shown.map((j) => (
+                <JobTile key={j.id} job={j} now={now} retentionDays={retentionDays} onClick={() => setPreview(j)} />
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -370,7 +378,7 @@ export default function Create() {
             <p className="eyebrow">Workbench</p>
             <div className="seg">
               {[['video', 'Video'], ['image', 'Ảnh']].map(([k, label]) => (
-                <button key={k} onClick={() => switchMode(k)} className={clsx(mode === k && 'on')} style={{ minWidth: 0, padding: '4px 14px', fontSize: 12 }}>
+                <button key={k} onClick={() => switchMode(k)} className={clsx(mode === k && 'on')} style={{ minWidth: 0, padding: '11px 26px', fontSize: 15, fontWeight: 600 }}>
                   {label}
                 </button>
               ))}
@@ -389,7 +397,7 @@ export default function Create() {
                 }}
                 rows={3}
                 placeholder={mode === 'image' ? 'Mô tả hình ảnh muốn tạo, phong cách, màu sắc… (Ctrl+Enter để tạo)' : 'Mô tả nội dung video, phong cách hoặc hình ảnh tham khảo… (Ctrl+Enter để tạo)'}
-                className="block w-full resize-none bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70"
+                className="block w-full resize-none bg-transparent px-3.5 py-4 text-[15px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70"
               />
               <span className="pointer-events-none absolute bottom-2 right-3 font-mono text-[10.5px] text-mist-400">
                 {prompt.length}/1000
@@ -398,16 +406,16 @@ export default function Create() {
                 onClick={assistPrompt}
                 disabled={assisting || prompt.trim().length < 2}
                 title="Nhờ Muse viết lại prompt bằng tiếng Việt"
-                className="absolute bottom-2 left-3 flex h-7 items-center gap-1.5 rounded-lg border border-brand-400/30 px-2.5 text-[11.5px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+                className="absolute bottom-2 left-3 flex h-9 items-center gap-1.5 rounded-lg border border-brand-400/30 px-3.5 text-[13px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
               >
-                {assisting ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                {assisting ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                 {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
               </button>
             </div>
 
             {/* 参考画面 */}
             <div className="lg:w-[44%]">
-              <p className="mb-2 text-[12.5px] font-medium text-mist-200">Hình ảnh tham khảo</p>
+              <p className="mb-2 text-[14px] font-medium text-mist-200">Hình ảnh tham khảo</p>
               <div className="flex flex-wrap items-center gap-2">
                 {refs.map((r) => (
                   <div
@@ -430,9 +438,9 @@ export default function Create() {
                   <button
                     onClick={() => fileRef.current?.click()}
                     title="Tải ảnh tham khảo lên (tối đa 3 ảnh)"
-                    className="grid h-11 w-11 place-items-center rounded-xl border border-white/[0.07] bg-[#0d111c] text-mist-300 transition hover:border-brand-400/50 hover:text-brand-300"
+                    className="grid h-12 w-12 place-items-center rounded-xl border border-white/[0.07] bg-[#0d111c] text-mist-300 transition hover:border-brand-400/50 hover:text-brand-300"
                   >
-                    {uploading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={16} />}
+                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={18} />}
                   </button>
                 )}
                 {refs.length === 0 && (
@@ -447,10 +455,10 @@ export default function Create() {
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
             {mode === 'video' && (
               <div className="flex items-center gap-2.5">
-                <span className="text-[12.5px] text-mist-300">Thời lượng</span>
+                <span className="text-[14px] text-mist-300">Thời lượng</span>
                 <div className="seg">
                   {[5, 8, 10].map((d) => (
-                    <button key={d} onClick={() => setDuration(d)} className={clsx(duration === d && 'on')}>
+                    <button key={d} onClick={() => setDuration(d)} className={clsx(duration === d && 'on')} style={{ padding: '9px 16px', fontSize: 14 }}>
                       {d}s
                     </button>
                   ))}
@@ -459,10 +467,10 @@ export default function Create() {
             )}
 
             <div className="flex items-center gap-2.5">
-              <span className="text-[12.5px] text-mist-300">Tỉ lệ</span>
+              <span className="text-[14px] text-mist-300">Tỉ lệ</span>
               <div className="seg">
                 {(mode === 'image' ? IMAGE_SIZES : VIDEO_SIZES).map((sz) => (
-                  <button key={sz} onClick={() => setSize(sz)} className={clsx(size === sz && 'on')}>
+                  <button key={sz} onClick={() => setSize(sz)} className={clsx(size === sz && 'on')} style={{ padding: '9px 16px', fontSize: 14 }}>
                     {sz}
                   </button>
                 ))}
@@ -474,22 +482,22 @@ export default function Create() {
                 <button
                   onClick={() => setParamsOpen(true)}
                   className={clsx(
-                    'flex h-11 items-center gap-2 rounded-xl border px-4 text-[13px] transition',
+                    'flex h-12 items-center gap-2 rounded-xl border px-4 text-[14px] transition',
                     buildExtra(params)
                       ? 'border-brand-400/50 bg-brand-500/10 text-brand-300'
                       : 'border-white/[0.08] text-mist-200 hover:border-white/20 hover:text-white'
                   )}
                 >
-                  <SlidersHorizontal size={15} /> Params
+                  <SlidersHorizontal size={16} /> Params
                   {buildExtra(params) && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />}
                 </button>
               )}
               {mode === 'video' && (
                 <button
                   onClick={() => setQueueOpen(true)}
-                  className="flex h-11 items-center gap-2 rounded-xl border border-white/[0.08] px-4 text-[13px] text-mist-200 transition hover:border-white/20 hover:text-white"
+                  className="flex h-12 items-center gap-2 rounded-xl border border-white/[0.08] px-4 text-[14px] text-mist-200 transition hover:border-white/20 hover:text-white"
                 >
-                  <Clock size={15} /> Queue
+                  <Clock size={16} /> Queue
                   <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white/[0.07] px-1.5 font-mono text-[10.5px]">
                     {running}
                   </span>
@@ -498,9 +506,9 @@ export default function Create() {
               <button
                 onClick={generate}
                 disabled={busy}
-                className="mint-btn flex h-12 items-center gap-3 rounded-2xl pl-5 pr-2 text-[16px] font-semibold"
+                className="mint-btn flex h-14 items-center gap-3 rounded-2xl pl-5 pr-2 text-[17px] font-semibold"
               >
-                {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                {busy ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
                 <span className="pr-3">{mode === 'image' ? 'Tạo ảnh' : 'Generate'}</span>
                 <span className="flex items-center gap-1 rounded-xl bg-[#04211a]/80 px-2.5 py-1.5 font-mono text-[12px] text-brand-300">
                   <Zap size={12} />
@@ -548,6 +556,14 @@ export default function Create() {
               <span>{preview.cost} điểm</span>
               {preview.params?.extra && <span className="truncate">{preview.params.extra}</span>}
               <span>{fmtAgo(preview.createdAt)}</span>
+              {jobDeleteAt(preview, retentionDays) && (
+                <span className="flex items-center gap-1 text-amber-300/90">
+                  <Clock size={11} /> Tự xóa sau {fmtCountdown(jobDeleteAt(preview, retentionDays) - now)}
+                </span>
+              )}
+              {preview.status === 'completed' && !preview.mediaUrl && (
+                <span>File đã bị xóa theo chính sách lưu trữ</span>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-1">
               {preview.mediaUrl && (
@@ -581,12 +597,14 @@ export default function Create() {
   );
 }
 
-function JobTile({ job, onClick }) {
+function JobTile({ job, now, retentionDays, onClick }) {
   const running = ['queued', 'processing'].includes(job.status);
   const failed = job.status === 'failed';
   const done = job.status === 'completed';
   const isVideo = /\.(mp4|webm|mov)/i.test(job.mediaUrl || '');
   const title = (job.prompt || 'Chưa đặt tên').split(/[：:，,。]/)[0].slice(0, 18);
+  const deleteAt = jobDeleteAt(job, retentionDays);
+  const gone = done && !job.mediaUrl;
 
   return (
     <button
@@ -636,11 +654,19 @@ function JobTile({ job, onClick }) {
         {running ? `Đang tạo · ${job.progress || 0}%` : done ? 'Xong' : failed ? 'Thất bại' : job.status}
       </span>
 
-      <div className="absolute inset-x-0 bottom-0 p-3.5">
-        <p className="line-clamp-1 text-[15px] font-semibold text-white">{title}</p>
-        <p className="mt-0.5 text-[11.5px] text-mist-300">
+      <div className="absolute inset-x-0 bottom-0 p-4">
+        <p className="line-clamp-1 text-[17px] font-semibold text-white">{title}</p>
+        <p className="mt-0.5 text-[13px] text-mist-300">
           {job.params?.duration ? `${job.params.duration}s · ` : ''}{job.params?.size} · {fmtAgo(job.createdAt)}
         </p>
+        {deleteAt && (
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-300/90">
+            <Clock size={10} /> Xóa sau {fmtCountdown(deleteAt - now)}
+          </p>
+        )}
+        {gone && (
+          <p className="mt-0.5 text-[11px] text-mist-400">File đã bị xóa theo chính sách lưu trữ</p>
+        )}
         {running && (
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full bg-brand-400 transition-all" style={{ width: `${Math.max(3, job.progress || 0)}%` }} />
