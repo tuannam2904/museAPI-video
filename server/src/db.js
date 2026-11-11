@@ -74,6 +74,48 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS film_projects (
+  id             TEXT PRIMARY KEY,
+  user_id        TEXT NOT NULL,
+  title          TEXT NOT NULL,
+  idea           TEXT NOT NULL,
+  genre          TEXT NOT NULL DEFAULT 'đời thường',
+  duration_total INTEGER NOT NULL DEFAULT 30,
+  scene_duration INTEGER NOT NULL DEFAULT 5,
+  style          TEXT NOT NULL DEFAULT 'điện ảnh',
+  aspect         TEXT NOT NULL DEFAULT '9:16',
+  script         TEXT,
+  status         TEXT NOT NULL DEFAULT 'draft', -- draft|script|storyboard|generating|ready|done
+  final_file     TEXT,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_films_user ON film_projects(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS film_scenes (
+  id           TEXT PRIMARY KEY,
+  project_id   TEXT NOT NULL,
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  duration     INTEGER NOT NULL DEFAULT 5,
+  description  TEXT NOT NULL DEFAULT '',
+  characters   TEXT NOT NULL DEFAULT '',
+  action       TEXT NOT NULL DEFAULT '',
+  camera       TEXT NOT NULL DEFAULT '',
+  lighting     TEXT NOT NULL DEFAULT '',
+  setting      TEXT NOT NULL DEFAULT '',
+  image_prompt TEXT NOT NULL DEFAULT '',
+  video_prompt TEXT NOT NULL DEFAULT '',
+  image_job_id TEXT,
+  video_job_id TEXT,
+  image_media  TEXT,
+  video_media  TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending', -- pending|image|image_done|video|done|failed
+  error        TEXT,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_film_scenes_proj ON film_scenes(project_id, sort_order);
+
 CREATE TABLE IF NOT EXISTS uploads (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,
@@ -191,6 +233,12 @@ const DEFAULT_SETTINGS = {
   priceImage: String(CFG.price.image),
   allowRegister: CFG.allowRegister ? '1' : '0',
   notice: '',
+  // Dung lượng media tối đa MỖI USER trên server (MB) — user nào vượt thì tự xóa file cũ nhất của chính user đó.
+  mediaMaxMB: '1024',
+  // Mức trần toàn server (MB) — tổng media của mọi user cộng lại.
+  mediaGlobalMaxMB: '5120',
+  // Giữ file media bao nhiêu ngày rồi tự xóa.
+  mediaRetentionDays: '7',
 };
 
 export function getSettings() {

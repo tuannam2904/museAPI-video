@@ -5,6 +5,7 @@ import { CFG, MEDIA_DIR, ROOT } from './config.js';
 import { db, getSettings } from './db.js';
 import { requireAuth, createUser, findUserByEmail } from './auth.js';
 import { startWorker } from './worker.js';
+import { startMediaCleanup } from './mediaCleanup.js';
 import authRoutes from './routes/auth.js';
 import accountRoutes from './routes/accounts.js';
 import genRoutes from './routes/generate.js';
@@ -17,6 +18,7 @@ import queueRoutes from './routes/queue.js';
 import teamRoutes from './routes/team.js';
 import chatRoutes from './routes/chat.js';
 import promptsRoutes from './routes/prompts.js';
+import filmsRoutes from './routes/films.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -62,6 +64,7 @@ app.use('/api', queueRoutes);
 app.use('/api', teamRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', promptsRoutes);
+app.use('/api', filmsRoutes);
 app.use('/api', genRoutes);
 
 // OpenAI 兼容对外接口（用 sk- 密钥鉴权，转发到上游）
@@ -106,6 +109,7 @@ function bootstrap() {
 
 bootstrap();
 startWorker();
+startMediaCleanup();
 
 app.listen(CFG.port, CFG.host, () => {
   console.log(`[server] 平台后端已启动 http://${CFG.host}:${CFG.port}`);
