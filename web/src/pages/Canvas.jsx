@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../components/ui.jsx';
+import NodeInspector from '../components/NodeInspector.jsx';
 
 const STORE_KEY = 'xm_canvas_v1';
 const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
@@ -60,6 +61,7 @@ export default function Canvas() {
   const [duration, setDuration] = useState(5);
   const [size, setSize] = useState('16:9');
   const [mode, setMode] = useState('video'); // video | image
+  const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
   const [tool, setTool] = useState('select'); // select | hand
   const [vpSize, setVpSize] = useState({ w: 800, h: 500 });
 
@@ -167,6 +169,7 @@ export default function Canvas() {
     // 只有空白处、中键、按住空格时平移
     if (tool !== 'hand' && !isMiddle && !isSpace && e.target !== e.currentTarget && !e.target.dataset.canvasbg) return;
     setSelected([]);
+    setInspectorId(null);
     dragRef.current = {
       mode: 'pan',
       startX: e.clientX,
@@ -185,6 +188,8 @@ export default function Canvas() {
       if (multi) return sel.includes(node.id) ? sel.filter((i) => i !== node.id) : [...sel, node.id];
       return sel.includes(node.id) ? sel : [node.id];
     });
+    // Bấm vào 1 nút thì mở bảng cấu hình của nó; chọn nhiều thì đóng bảng
+    if (multi) setInspectorId(null); else setInspectorId(node.id);
     dragRef.current = {
       mode: 'node',
       id: node.id,
@@ -299,10 +304,11 @@ export default function Canvas() {
         e.preventDefault();
         setDoc((d) => pruneLinks({ ...d, nodes: d.nodes.filter((n) => !selected.includes(n.id)) }));
         setSelected([]);
+        setInspectorId(null);
       }
       if (e.key === 'v' || e.key === 'V') setTool('select');
       if (e.key === 'h' || e.key === 'H') setTool('hand');
-      if (e.key === 'Escape') setSelected([]);
+      if (e.key === 'Escape') { setSelected([]); setInspectorId(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -324,11 +330,76 @@ export default function Canvas() {
     };
     setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
     setSelected([n.id]);
+    setInspectorId(n.id);
   };
 
   const removeSelected = () => {
     setDoc((d) => pruneLinks({ ...d, nodes: d.nodes.filter((n) => !selected.includes(n.id)) }));
     setSelected([]);
+    setInspectorId(null);
+  };
+
+  /* ---------------- Cấu hình nút ---------------- */
+  const updateNode = (id, patch) => {
+    setDoc((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }));
+  };
+
+  const deleteNode = (id) => {
+    setDoc((d) => pruneLinks({ ...d, nodes: d.nodes.filter((n) => n.id !== id) }));
+    setSelected((s) => s.filter((i) => i !== id));
+    setInspectorId(null);
+  };
+
+  const removeLinkBetween = (a, b) => {
+    setDoc((d) => ({
+      ...d,
+      links: (d.links || []).filter((l) => !((l.from === a && l.to === b) || (l.from === b && l.to === a))),
+    }));
+  };
+
+  // Các nút nối VÀO nút này (đầu vào): văn bản làm câu lệnh, ảnh làm tham chiếu
+  const nodeInputs = (nodeId, d = doc) => {
+    const ids = (d.links || []).filter((l) => l.to === nodeId).map((l) => l.from);
+    return ids.map((id) => d.nodes.find((n) => n.id === id)).filter(Boolean);
+  };
+
+  const nodeOutputs = (nodeId, d = doc) => {
+    const ids = (d.links || []).filter((l) => l.from === nodeId).map((l) => l.to);
+    return ids.map((id) => d.nodes.find((n) => n.id === id)).filter(Boolean);
+  };
+
+  // Tạo nội dung cho 1 nút ảnh/video từ các nút nối vào nó
+  const generateNode = async (node) => {
+    if (!node || node.type === 'text') return;
+    const inputs = nodeInputs(node.id);
+    const images = inputs.filter((n) => n.type === 'image' && n.mediaUrl).map((n) => n.mediaUrl);
+    const textInputs = inputs.filter((n) => n.type === 'text' && n.text?.trim()).map((n) => n.text.trim());
+    const promptText = node.text?.trim() || textInputs.join('\n') || '';
+    if (promptText.length < 2) return toast('Nút này chưa có câu lệnh — nhập câu lệnh hoặc nối một nút văn bản vào', 'error');
+    const isImage = node.type === 'image';
+    const cost = isImage ? IMAGE_COST : 10 + 2 * (node.duration || 5);
+    if ((user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
+    setBusy(true);
+    try {
+      const { job } = isImage
+        ? await api.createImage({ prompt: promptText, size: node.size || '1:1', images })
+        : await api.createVideo({ prompt: promptText, duration: node.duration || 5, size: node.size || '16:9', images });
+      updateNode(node.id, { jobId: job.id, status: 'running', progress: 10, mediaUrl: null, error: null });
+      toast('Đã gửi nút để tạo', 'ok');
+      refresh();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Tải ảnh từ máy lên làm nội dung của 1 nút ảnh
+  const uploadToNode = async (node, file) => {
+    const out = await api.upload([file]);
+    const url = out.files?.[0]?.url;
+    if (!url) throw new Error('Tải lên thất bại');
+    updateNode(node.id, { mediaUrl: url, status: 'done', text: node.text || 'Ảnh tải lên' });
   };
 
   const fitView = () => {
@@ -350,39 +421,51 @@ export default function Canvas() {
 
   /* ---------------- 生成 ---------------- */
   const generate = async () => {
-    if (prompt.trim().length < 2) return toast('Hãy nhập nội dung văn bản trước', 'error');
+    // Tạo nhanh từ thanh dưới: lấy câu lệnh ở ô nhập (hoặc của nút văn bản đang chọn),
+    // lấy TẤT CẢ ảnh của các nút đang chọn làm tham chiếu, nút mới nối từ mọi nút đã chọn.
+    const selNodes = doc.nodes.filter((n) => selected.includes(n.id));
+    const promptText = prompt.trim()
+      || selNodes.find((n) => n.type === 'text')?.text?.trim()
+      || '';
+    if (promptText.length < 2) return toast('Hãy nhập nội dung văn bản trước', 'error');
+    const images = selNodes.filter((n) => n.type === 'image' && n.mediaUrl).map((n) => n.mediaUrl);
     const cost = mode === 'image' ? IMAGE_COST : 10 + 2 * duration;
     if ((user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
 
-    const bound = selected.length === 1 ? doc.nodes.find((n) => n.id === selected[0]) : null;
+    const rightX = selNodes.length ? Math.max(...selNodes.map((n) => n.x)) : 0;
+    const anchorY = selNodes.length ? selNodes[0].y : 300;
     setBusy(true);
     try {
       const { job } = mode === 'image'
-        ? await api.createImage({ prompt: prompt.trim(), size, images: [] })
+        ? await api.createImage({ prompt: promptText, size, images })
         : await api.createVideo({
-          prompt: prompt.trim(),
+          prompt: promptText,
           duration,
           size,
-          images: [],
+          images,
         });
 
       const node = {
         id: newId(),
         type: mode === 'image' ? 'image' : 'video',
-        x: bound ? bound.x + NODE_W + 60 : 520,
-        y: bound ? bound.y : 300,
-        text: prompt.trim(),
+        x: selNodes.length ? rightX + NODE_W + 60 : 520,
+        y: anchorY,
+        text: promptText,
         label: mode === 'image' ? 'Hình ảnh' : 'Video',
+        size,
+        duration,
         jobId: job.id,
         status: 'running',
         mediaUrl: null,
       };
+      const newLinks = selNodes.map((n) => ({ from: n.id, to: node.id }));
       setDoc((d) => ({
         ...d,
         nodes: [...d.nodes, node],
-        links: bound ? [...(d.links || []), { from: bound.id, to: node.id }] : d.links || [],
+        links: [...(d.links || []), ...newLinks],
       }));
       setSelected([node.id]);
+      setInspectorId(node.id);
       setPrompt('');
       toast('Đã gửi nút để tạo', 'ok');
       refresh();
@@ -564,11 +647,15 @@ export default function Canvas() {
         <div className="absolute bottom-3 left-1/2 z-20 w-[min(760px,calc(100%-24px))] -translate-x-1/2 md:bottom-5 md:w-[min(760px,calc(100%-300px))]">
           <div className="mb-2 flex items-center justify-center gap-2">
             <span className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-[#121726]/90 px-3 py-1 text-[11px] text-mist-300 backdrop-blur">
-              <span className={clsx('h-1.5 w-1.5 rounded-full', boundNode ? 'bg-brand-400' : 'bg-mist-400')} />
-              {boundNode ? `Đã liên kết: ${boundNode.label} (kết quả tạo sẽ nối vào bên phải của nó)` : 'Chưa liên kết nút · Kết quả sẽ đặt ở giữa canvas'}
+              <span className={clsx('h-1.5 w-1.5 rounded-full', selected.length ? 'bg-brand-400' : 'bg-mist-400')} />
+              {selected.length === 1
+                ? `Đã liên kết: ${boundNode?.label || ''} (kết quả tạo sẽ nối vào bên phải của nó)`
+                : selected.length > 1
+                  ? `Đã chọn ${selected.length} nút · Kết quả tạo sẽ nối từ mọi nút đã chọn`
+                  : 'Chưa liên kết nút · Kết quả sẽ đặt ở giữa canvas'}
             </span>
-            {boundNode && (
-              <button onClick={() => setSelected([])} className="flex items-center gap-0.5 text-[11px] text-mist-400 hover:text-mist-200">
+            {selected.length > 0 && (
+              <button onClick={() => { setSelected([]); setInspectorId(null); }} className="flex items-center gap-0.5 text-[11px] text-mist-400 hover:text-mist-200">
                 Hủy liên kết <X size={10} />
               </button>
             )}
@@ -633,6 +720,26 @@ export default function Canvas() {
           </div>
         </div>
       </div>
+
+      {/* Bảng cấu hình nút: bấm vào 1 nút là hiện */}
+      <NodeInspector
+        node={inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null}
+        inputs={inspectorId ? nodeInputs(inspectorId) : []}
+        outputs={inspectorId ? nodeOutputs(inspectorId) : []}
+        busy={busy}
+        onClose={() => setInspectorId(null)}
+        onUpdate={(patch) => inspectorId && updateNode(inspectorId, patch)}
+        onGenerate={() => {
+          const n = doc.nodes.find((x) => x.id === inspectorId);
+          if (n) generateNode(n);
+        }}
+        onUpload={async (file) => {
+          const n = doc.nodes.find((x) => x.id === inspectorId);
+          if (n) await uploadToNode(n, file);
+        }}
+        onDelete={() => inspectorId && deleteNode(inspectorId)}
+        onRemoveLink={(otherId) => inspectorId && removeLinkBetween(inspectorId, otherId)}
+      />
     </div>
   );
 }
