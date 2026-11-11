@@ -60,6 +60,14 @@ export async function addAccount({ label, cookie, expires, proxy }) {
   return call('/admin/accounts', { method: 'POST', body });
 }
 
+export async function updateAccount(upstreamId, { label, enabled, proxy } = {}) {
+  const body = {};
+  if (label !== undefined) body.label = label;
+  if (enabled !== undefined) body.enabled = enabled;
+  if (proxy !== undefined) body.proxy = proxy; // null = xóa proxy
+  return call(`/admin/accounts/${upstreamId}`, { method: 'PATCH', body });
+}
+
 export async function deleteAccount(upstreamId) {
   return call(`/admin/accounts/${encodeURIComponent(upstreamId)}`, { method: 'DELETE' });
 }
