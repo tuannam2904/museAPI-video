@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Type, Image as ImageIcon, Video, Trash2, ZoomIn, ZoomOut, Maximize, Loader2, X, Sparkles,
-  MousePointer2, Hand, ImagePlus, ChevronDown, Map as MapIcon, Expand,
+  MousePointer2, Hand, ImagePlus, ChevronDown, Map as MapIcon, Expand, BookOpen, Clapperboard,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api } from '../lib/api.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../components/ui.jsx';
 import NodeInspector from '../components/NodeInspector.jsx';
+import PromptLibrary from '../components/PromptLibrary.jsx';
+import StoryboardDrawer from '../components/StoryboardDrawer.jsx';
 
 const STORE_KEY = 'xm_canvas_v1';
 const IMAGE_COST = 5;
@@ -56,6 +58,8 @@ export default function Canvas() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(true);
   const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
+  const [libraryOpen, setLibraryOpen] = useState(false); // drawer thư viện prompt
+  const [storyOpen, setStoryOpen] = useState(false); // drawer bảng phân cảnh
   const [tool, setTool] = useState('select'); // select | hand
   const [vpSize, setVpSize] = useState({ w: 800, h: 500 });
 
@@ -341,6 +345,54 @@ export default function Canvas() {
     setInspectorId(null);
   };
 
+  // Đưa một prompt từ thư viện vào Canvas thành nút văn bản mới
+  const usePrompt = (p) => {
+    const center = screenToCanvas(
+      (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 400) / 2,
+      (viewportRef.current?.getBoundingClientRect().top ?? 0) + (viewportRef.current?.clientHeight ?? 300) / 2
+    );
+    const n = {
+      id: newId(),
+      type: 'text',
+      x: Math.round(center.x - NODE_W / 2),
+      y: Math.round(center.y - NODE_H / 2),
+      text: p.text || '',
+      label: (p.title || 'Prompt mẫu').slice(0, 20),
+    };
+    setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
+    setSelected([n.id]);
+    setInspectorId(n.id);
+    setLibraryOpen(false);
+    toast('Đã đưa prompt vào Canvas', 'ok');
+  };
+
+  // Đưa bảng phân cảnh lên Canvas: mỗi shot thành một nút video, nối tiếp nhau
+  const sendShots = (shots, aspect) => {
+    if (!shots?.length) return;
+    const center = screenToCanvas(
+      (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 400) / 2,
+      (viewportRef.current?.getBoundingClientRect().top ?? 0) + (viewportRef.current?.clientHeight ?? 300) / 2
+    );
+    const startX = Math.round(center.x - NODE_W / 2);
+    const startY = Math.round(center.y - NODE_H / 2);
+    const nodes = shots.map((s, i) => ({
+      id: newId(),
+      type: 'video',
+      x: startX + i * (NODE_W + 60),
+      y: startY,
+      text: s.prompt || s.visual || '',
+      label: `Shot ${s.shot || i + 1}`,
+      size: aspect || '9:16',
+      duration: s.duration || 8,
+    }));
+    const links = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }));
+    setDoc((d) => ({ ...d, nodes: [...d.nodes, ...nodes], links: [...(d.links || []), ...links] }));
+    setSelected([nodes[0].id]);
+    setInspectorId(nodes[0].id);
+    setStoryOpen(false);
+    toast(`Đã đưa ${nodes.length} shot lên Canvas`, 'ok');
+  };
+
   /* ---------------- Cấu hình nút ---------------- */
   const updateNode = (id, patch) => {
     setDoc((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }));
@@ -582,6 +634,9 @@ export default function Canvas() {
           <ToolBtn icon={ImageIcon} onClick={() => addNode('image')} title="Nút hình ảnh mới" />
           <ToolBtn icon={Video} onClick={() => addNode('video')} title="Nút video mới" />
           <Sep />
+          <ToolBtn icon={BookOpen} onClick={() => setLibraryOpen(true)} title="Thư viện prompt (204 mẫu)" />
+          <ToolBtn icon={Clapperboard} onClick={() => setStoryOpen(true)} title="Bảng phân cảnh" />
+          <Sep />
           <ToolBtn icon={ZoomOut} onClick={() => zoomBy(1 / 1.15)} title="Thu nhỏ" />
           <button
             onClick={() => setView((v) => ({ ...v, z: 1 }))}
@@ -619,6 +674,10 @@ export default function Canvas() {
           />
         )}
       </div>
+
+      {/* Thư viện prompt + Bảng phân cảnh */}
+      <PromptLibrary open={libraryOpen} onClose={() => setLibraryOpen(false)} onUse={usePrompt} />
+      <StoryboardDrawer open={storyOpen} onClose={() => setStoryOpen(false)} onSend={sendShots} />
 
     </div>
   );
