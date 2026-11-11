@@ -150,6 +150,7 @@ r.get('/', requireAuth, async (req, res) => {
       status: up ? (up.ok === true ? 'ok' : up.ok === false ? 'error' : 'unknown') : 'missing',
       note: up?.note || a.note || null,
       expiresAt: up?.expires_at ?? a.expires_at,
+      proxy: up?.proxy || null,
       quota,
       busy: !!up?.busy,
       createdAt: a.created_at,
@@ -190,11 +191,14 @@ r.post('/quota', requireAuth, async (req, res) => {
   }
 });
 
-// 核心：前端粘贴 Cookie 头即可导入
+// 核心：前端粘贴 Cookie 头即可导入（可 kèm proxy riêng cho tài khoản）
 r.post('/', requireAuth, async (req, res) => {
-  const { cookie, label } = req.body || {};
+  const { cookie, label, proxy } = req.body || {};
   if (!cookie || String(cookie).trim().length < 10) {
     return res.status(400).json({ error: '请粘贴完整的 Cookie（至少包含 hatch_sess）' });
+  }
+  if (proxy !== undefined && proxy !== null && (typeof proxy !== 'object' || typeof proxy.server !== 'string' || !proxy.server.trim())) {
+    return res.status(400).json({ error: 'Proxy phải có địa chỉ máy chủ, ví dụ http://host:port' });
   }
   const text = String(cookie).trim();
   // 容错：用户可能粘贴了 "Cookie: xxx" 前缀或整段请求头
@@ -205,6 +209,7 @@ r.post('/', requireAuth, async (req, res) => {
     result = await muse.addAccount({
       label: label || `muse-${new Date().toISOString().slice(5, 16)}`,
       cookie: cleaned,
+      ...(proxy ? { proxy } : {}),
     });
   } catch (e) {
     return res.status(502).json({ error: `上游拒绝导入：${e.message}` });
@@ -226,6 +231,27 @@ r.post('/', requireAuth, async (req, res) => {
     warning: result.warning || null,
     essentialMissing: result.essential_missing || [],
   });
+});
+
+/* Đặt / đổi / xóa proxy riêng của một tài khoản (chỉ traffic đi muse.ai mới qua proxy này).
+ * proxy = { server, username?, password? } để đặt; proxy = null để xóa. */
+r.patch('/:id/proxy', requireAuth, async (req, res) => {
+  const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: '账号不存在' });
+  if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: '无权操作该账号' });
+  }
+  const { proxy } = req.body || {};
+  if (proxy !== null && (typeof proxy !== 'object' || typeof proxy.server !== 'string' || !proxy.server.trim())) {
+    return res.status(400).json({ error: 'Proxy phải có địa chỉ máy chủ, ví dụ http://host:port' });
+  }
+  try {
+    await muse.updateAccount(row.upstream_id, { proxy: proxy === null ? null : proxy });
+    await syncFromUpstream();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
 });
 
 r.post('/:id/test', requireAuth, async (req, res) => {
