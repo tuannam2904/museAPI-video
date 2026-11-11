@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react';
 import {
-  X, Type, Image as ImageIcon, Video, Sparkles, Loader2, Trash2, Upload, Unlink,
+  X, Type, Image as ImageIcon, Video, Sparkles, Loader2, Trash2, Upload, Unlink, Wand2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useToast } from './ui.jsx';
+import { api } from '../lib/api.js';
+
+const ASSIST_SYSTEM = 'Bạn là trợ lý viết prompt cho công cụ tạo video và ảnh AI. Người dùng mô tả ý tưởng bằng tiếng Việt. Nhiệm vụ của bạn: viết lại thành một prompt chi tiết, sinh động, sẵn sàng dùng để tạo video/ảnh. Chỉ trả về duy nhất nội dung prompt, không giải thích, không thêm tiêu đề hay dấu ngoặc kép bao quanh. Prompt viết bằng tiếng Việt.';
 
 const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
@@ -21,6 +24,7 @@ export default function NodeInspector({
   const toast = useToast();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [assisting, setAssisting] = useState(false);
 
   if (!node) return null;
 
@@ -31,6 +35,31 @@ export default function NodeInspector({
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const cost = isImage ? 5 : isVideo ? 10 + 2 * (node.duration || 5) : 0;
+
+  // Nhờ Muse viết lại câu lệnh bằng tiếng Việt (dùng tài khoản Muse đã liên kết)
+  const assistPrompt = async () => {
+    const idea = node.text?.trim();
+    if (!idea) return toast('Nhập ý tưởng trước đã', 'error');
+    const kind = isVideo ? 'video' : isImage ? 'ảnh' : 'video/ảnh';
+    setAssisting(true);
+    try {
+      const out = await api.chat({
+        model: 'muse-spark',
+        messages: [
+          { role: 'system', content: ASSIST_SYSTEM },
+          { role: 'user', content: `Viết prompt ${kind}: ${idea}` },
+        ],
+      });
+      const content = out?.content?.trim();
+      if (!content) throw new Error('Muse không trả về nội dung');
+      onUpdate({ text: content });
+      toast('Đã viết xong prompt', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setAssisting(false);
+    }
+  };
 
   const pickFile = async (files) => {
     const f = files?.[0];
@@ -87,6 +116,16 @@ export default function NodeInspector({
             : 'Mô tả video muốn tạo… (trống thì dùng câu lệnh nút văn bản nối vào)'}
         className="block w-full resize-none rounded-xl border border-white/[0.07] bg-[#0d111c] px-3 py-2 text-[12.5px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
       />
+
+      {/* Nhờ Muse viết prompt bằng tiếng Việt */}
+      <button
+        onClick={assistPrompt}
+        disabled={assisting || !node.text?.trim()}
+        className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-400/30 text-[12px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+      >
+        {assisting ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+        {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
+      </button>
 
       {/* Thông số */}
       {!isText && (
