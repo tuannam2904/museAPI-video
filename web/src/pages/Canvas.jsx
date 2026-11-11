@@ -12,12 +12,13 @@ const STORE_KEY = 'xm_canvas_v1';
 
 const NODE_W = 260;
 const NODE_H = 170;
-// Chiều cao THẬT của node khi render (padding 28 + header ~20 + nội dung + footer ~17 + viền 2):
-// text: nội dung cố định 96px (min-h 76 + py 20, giới hạn 4 dòng) → ≈ 182px
-// ảnh/video: media cố định 128px → ≈ 214px.
-// Đường nối vẽ ở nodeH/2, chấm tròn ở top-1/2 của node thật, nên 2 số này
-// phải khớp nhau thì đường mới chạm đúng tâm chấm tròn.
-const nodeH = (n) => (n.type === 'text' ? 182 : 214);
+// Chiều cao node khi render KHÔNG cố định: <p> văn bản dùng min-h 76px (border-box)
+// nên node text cao 162px (ít chữ) tới 186px (đủ 4 dòng); node ảnh/video cố định 214px.
+// Vì vậy không dùng số cứng: đo chiều cao thật bằng ResizeObserver (xem nodeHeights
+// trong Canvas), nodeHGuess chỉ là giá trị tạm trước khi đo xong. Đường nối vẽ ở
+// nodeH/2, chấm tròn ở top-1/2 của node thật, nên 2 số này phải khớp nhau thì
+// đường mới chạm đúng tâm chấm tròn.
+const nodeHGuess = (n) => (n.type === 'text' ? 174 : 214);
 
 let seq = 1;
 const newId = () => `n_${Date.now().toString(36)}_${seq++}`;
@@ -64,6 +65,44 @@ export default function Canvas() {
   docRef.current = doc;
   const viewRef = useRef(view);
   viewRef.current = view;
+  // Đo chiều cao THẬT của từng node (ResizeObserver) để đường nối chạm đúng tâm
+  // chấm tròn: node text cao 162-186px tùy độ dài chữ, không có số cứng nào đúng hết.
+  const [nodeHeights, setNodeHeights] = useState({});
+  const heightsRef = useRef({});
+  const nodeEls = useRef(new Map());
+  const nodeRefCbs = useRef(new Map());
+  const roRef = useRef(null);
+  useEffect(() => {
+    const ro = new ResizeObserver((entries) => {
+      let changed = false;
+      const next = { ...heightsRef.current };
+      for (const e of entries) {
+        const id = e.target.getAttribute('data-node-id');
+        const h = Math.round(e.borderBoxSize?.[0]?.blockSize ?? e.target.offsetHeight);
+        if (id && next[id] !== h) { next[id] = h; changed = true; }
+      }
+      if (changed) { heightsRef.current = next; setNodeHeights(next); }
+    });
+    roRef.current = ro;
+    nodeEls.current.forEach((el) => ro.observe(el));
+    return () => { ro.disconnect(); roRef.current = null; };
+  }, []);
+  // Callback ref ổn định cho từng node (tránh detach/attach lại mỗi lần render)
+  const getNodeRef = (id) => {
+    if (!nodeRefCbs.current.has(id)) {
+      nodeRefCbs.current.set(id, (el) => {
+        if (el) { nodeEls.current.set(id, el); roRef.current?.observe(el); }
+        else {
+          const old = nodeEls.current.get(id);
+          if (old) roRef.current?.unobserve(old);
+          nodeEls.current.delete(id);
+        }
+      });
+    }
+    return nodeRefCbs.current.get(id);
+  };
+  // Đọc qua ref nên không bị kẹt giá trị cũ trong các window listener (onUp).
+  const nodeH = useCallback((n) => heightsRef.current[n.id] ?? nodeHGuess(n), []);
   const [linkDrag, setLinkDrag] = useState(null); // { from, side, x, y } — đầu tạm của đường nối đang kéo
   const bootRef = useRef(false);
 
@@ -470,6 +509,7 @@ export default function Canvas() {
               <CanvasNode
                 key={n.id}
                 node={n}
+                nodeRef={getNodeRef(n.id)}
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
@@ -510,7 +550,7 @@ export default function Canvas() {
         </span>
 
         {/* 小地图 */}
-        <Minimap nodes={doc.nodes} view={view} vp={vpSize} />
+        <Minimap nodes={doc.nodes} view={view} vp={vpSize} heights={nodeHeights} />
 
         {/* 底部悬浮生成条 */}
         <div className="absolute bottom-5 left-1/2 z-20 w-[min(760px,calc(100%-300px))] min-w-[420px] -translate-x-1/2">
@@ -597,7 +637,8 @@ function ToolBtn({ icon: Icon, onClick, active, disabled, danger, title }) {
   );
 }
 
-function Minimap({ nodes, view, vp }) {
+function Minimap({ nodes, view, vp, heights }) {
+  const h = (n) => heights?.[n.id] ?? nodeHGuess(n);
   const W = 176;
   const H = 116;
   if (!nodes.length) return null;
@@ -608,7 +649,7 @@ function Minimap({ nodes, view, vp }) {
   const minX = Math.min(vx0, ...nodes.map((n) => n.x)) - 40;
   const minY = Math.min(vy0, ...nodes.map((n) => n.y)) - 40;
   const maxX = Math.max(vx0 + vw, ...nodes.map((n) => n.x + NODE_W)) + 40;
-  const maxY = Math.max(vy0 + vh, ...nodes.map((n) => n.y + nodeH(n))) + 40;
+  const maxY = Math.max(vy0 + vh, ...nodes.map((n) => n.y + h(n))) + 40;
   const k = Math.min(W / (maxX - minX), H / (maxY - minY));
   const tx = (x) => (x - minX) * k;
   const ty = (y) => (y - minY) * k;
@@ -626,7 +667,7 @@ function Minimap({ nodes, view, vp }) {
           <span
             key={n.id}
             className="absolute rounded-[3px] border border-mist-300/40 bg-mist-300/25"
-            style={{ left: tx(n.x), top: ty(n.y), width: Math.max(4, NODE_W * k), height: Math.max(3, nodeH(n) * k) }}
+            style={{ left: tx(n.x), top: ty(n.y), width: Math.max(4, NODE_W * k), height: Math.max(3, h(n) * k) }}
           />
         ))}
         <span
@@ -638,7 +679,7 @@ function Minimap({ nodes, view, vp }) {
   );
 }
 
-function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick }) {
+function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, nodeRef }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -651,6 +692,8 @@ function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick }) 
     <div
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
+      ref={nodeRef}
+      data-node-id={node.id}
       style={{ left: node.x, top: node.y, width: NODE_W }}
       className={clsx('glass-node absolute touch-none cursor-grab p-3.5 active:cursor-grabbing', active && 'is-active')}
     >
