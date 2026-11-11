@@ -9,6 +9,9 @@ import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../components/ui.jsx';
 
 const STORE_KEY = 'xm_canvas_v1';
+const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
+const IMAGE_COST = 5;
 
 const NODE_W = 260;
 const NODE_H = 170;
@@ -56,6 +59,7 @@ export default function Canvas() {
   const [saved, setSaved] = useState(true);
   const [duration, setDuration] = useState(5);
   const [size, setSize] = useState('16:9');
+  const [mode, setMode] = useState('video'); // video | image
   const [tool, setTool] = useState('select'); // select | hand
   const [vpSize, setVpSize] = useState({ w: 800, h: 500 });
 
@@ -347,25 +351,28 @@ export default function Canvas() {
   /* ---------------- 生成 ---------------- */
   const generate = async () => {
     if (prompt.trim().length < 2) return toast('Hãy nhập nội dung văn bản trước', 'error');
-    if ((user?.credits ?? 0) < 10 + 2 * duration) return toast('Không đủ điểm', 'error');
+    const cost = mode === 'image' ? IMAGE_COST : 10 + 2 * duration;
+    if ((user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
 
     const bound = selected.length === 1 ? doc.nodes.find((n) => n.id === selected[0]) : null;
     setBusy(true);
     try {
-      const { job } = await api.createVideo({
-        prompt: prompt.trim(),
-        duration,
-        size,
-        images: [],
-      });
+      const { job } = mode === 'image'
+        ? await api.createImage({ prompt: prompt.trim(), size, images: [] })
+        : await api.createVideo({
+          prompt: prompt.trim(),
+          duration,
+          size,
+          images: [],
+        });
 
       const node = {
         id: newId(),
-        type: 'video',
+        type: mode === 'image' ? 'image' : 'video',
         x: bound ? bound.x + NODE_W + 60 : 520,
         y: bound ? bound.y : 300,
         text: prompt.trim(),
-        label: 'Video',
+        label: mode === 'image' ? 'Hình ảnh' : 'Video',
         jobId: job.id,
         status: 'running',
         mediaUrl: null,
@@ -440,7 +447,7 @@ export default function Canvas() {
             Canvas vô hạn
             <span className="h-2 w-2 rounded-full bg-brand-400 shadow-[0_0_8px_rgba(79,227,193,.8)]" />
           </h1>
-          <p className="mt-1 text-[12.5px] text-mist-400">Tự do sắp xếp ý tưởng và tạo video trên canvas vô hạn</p>
+          <p className="mt-1 text-[12.5px] text-mist-400">Tự do sắp xếp ý tưởng và tạo video hoặc ảnh trên canvas vô hạn</p>
         </div>
         <span className="flex items-center gap-1.5 text-[11.5px] text-mist-400">
           <span className={clsx('h-1.5 w-1.5 rounded-full', saved ? 'bg-brand-400' : 'bg-mist-400')} />
@@ -509,6 +516,7 @@ export default function Canvas() {
               <CanvasNode
                 key={n.id}
                 node={n}
+                mode={mode}
                 nodeRef={getNodeRef(n.id)}
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
@@ -566,6 +574,22 @@ export default function Canvas() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-400/30 bg-[#121726]/95 p-2 shadow-[0_0_0_1px_rgba(79,227,193,.08),0_20px_50px_-20px_rgba(0,0,0,.9),0_0_40px_-18px_rgba(79,227,193,.5)] backdrop-blur-xl">
+            <div className="seg shrink-0">
+              {[['video', 'Video'], ['image', 'Ảnh']].map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    setMode(k);
+                    if (k === 'video' && !VIDEO_SIZES.includes(size)) setSize('16:9');
+                    if (k === 'image' && !IMAGE_SIZES.includes(size)) setSize('1:1');
+                  }}
+                  className={clsx(mode === k && 'on')}
+                  style={{ minWidth: 0, padding: '4px 12px', fontSize: 12 }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <button
               onClick={() => addNode('image')}
               title="Thêm nút hình ảnh"
@@ -577,24 +601,26 @@ export default function Canvas() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }}
-              placeholder="Mô tả nội dung video bạn muốn tạo…"
+              placeholder={mode === 'image' ? 'Mô tả hình ảnh muốn tạo…' : 'Mô tả nội dung video bạn muốn tạo…'}
               className="h-11 min-w-[140px] flex-1 basis-full rounded-xl border border-white/[0.06] bg-[#0d111c] px-3.5 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50 sm:basis-0"
             />
-            <select
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
-              title="Thời lượng"
-            >
-              {[5, 8, 10].map((d) => <option key={d} value={d}>{d}s</option>)}
-            </select>
+            {mode === 'video' && (
+              <select
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+                className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
+                title="Thời lượng"
+              >
+                {[5, 8, 10].map((d) => <option key={d} value={d}>{d}s</option>)}
+              </select>
+            )}
             <select
               value={size}
               onChange={(e) => setSize(e.target.value)}
               className="h-11 cursor-pointer rounded-xl border border-white/[0.06] bg-[#0d111c] px-2 font-mono text-[12px] text-mist-200 outline-none"
               title="Tỉ lệ"
             >
-              {['16:9', '9:16', '1:1'].map((x) => <option key={x} value={x}>{x}</option>)}
+              {(mode === 'image' ? IMAGE_SIZES : VIDEO_SIZES).map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
             <button
               onClick={generate}
@@ -602,7 +628,7 @@ export default function Canvas() {
               className="mint-btn flex h-11 shrink-0 items-center gap-2 rounded-xl px-5 text-[14px] font-semibold"
             >
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              Tạo
+              {mode === 'image' ? 'Tạo ảnh' : 'Tạo'}
             </button>
           </div>
         </div>
@@ -679,7 +705,7 @@ function Minimap({ nodes, view, vp, heights }) {
   );
 }
 
-function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, nodeRef }) {
+function CanvasNode({ node, mode, active, onPointerDown, onPortDown, onDoubleClick, nodeRef }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -749,7 +775,7 @@ function CanvasNode({ node, active, onPointerDown, onPortDown, onDoubleClick, no
       <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px]">
         {isText ? (
           <span className="flex items-center gap-1.5 text-mist-400">
-            <Sparkles size={12} /> muse-video
+            <Sparkles size={12} /> {mode === 'image' ? 'muse-image' : 'muse-video'}
           </span>
         ) : (
           <>
