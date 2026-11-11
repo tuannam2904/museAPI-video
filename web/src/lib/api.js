@@ -45,6 +45,7 @@ export const api = {
   bindStatus: (code) => request(`/api/accounts/bind/${code}`),
   testAccount: (id) => request(`/api/accounts/${id}/test`, { method: 'POST' }),
   keepaliveAccount: (id) => request(`/api/accounts/${id}/keepalive`, { method: 'POST' }),
+  updateAccountProxy: (id, proxy) => request(`/api/accounts/${id}/proxy`, { method: 'PATCH', body: { proxy } }),
   deleteAccount: (id) => request(`/api/accounts/${id}`, { method: 'DELETE' }),
 
   createVideo: (b) => request('/api/videos', { method: 'POST', body: b }),
