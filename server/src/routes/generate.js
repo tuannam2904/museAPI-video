@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Router } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../auth.js';
-import { CFG } from '../config.js';
+import { CFG, MEDIA_DIR } from '../config.js';
 import {
   db, uid, now, createJob, getJob, updateJob, listJobs, addCredits, priceOf, getSettings,
 } from '../db.js';
@@ -37,10 +37,11 @@ const MIME = {
   '.pdf': 'application/pdf',
 };
 
-/** 把平台本地上传的参考素材转成 data URL，上游无需公网访问权限 */
+/** 把平台本地素材（/uploads/ 上传, /media/ đã tạo）转成 data URL，上游无需公网访问权限 */
 function toDataUrl(localUrl) {
   const name = path.basename(String(localUrl));
-  const file = path.join(UPLOAD_DIR, name);
+  const dir = String(localUrl).startsWith('/media/') ? MEDIA_DIR : UPLOAD_DIR;
+  const file = path.join(dir, name);
   if (!fs.existsSync(file)) return null;
   const ext = path.extname(file).toLowerCase();
   const mime = MIME[ext] || 'application/octet-stream';
@@ -54,7 +55,7 @@ function normalizeRefs(list) {
   for (const item of list) {
     if (!item) continue;
     if (typeof item === 'string') {
-      if (item.startsWith('/uploads/')) {
+      if (item.startsWith('/uploads/') || item.startsWith('/media/')) {
         const d = toDataUrl(item);
         if (d) out.push({ url: d });
       } else if (/^(https?:|data:)/i.test(item)) {
