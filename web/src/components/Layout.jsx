@@ -1,19 +1,23 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Sparkles, Workflow, KeyRound, LogOut } from 'lucide-react';
+import { Sparkles, Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../store/auth.jsx';
 
-/** 侧栏只保留三个入口：快捷创作 / 无限画布 / muse 导入 */
+/** 侧栏入口：快捷创作 / 无限画布 / Film Studio / 作品 / muse 导入 / 管理（仅 admin） */
 const NAV = [
   { to: '/create', label: 'Tạo nhanh', icon: Sparkles },
   { to: '/canvas', label: 'Canvas vô hạn', icon: Workflow },
+  { to: '/film-studio', label: 'Film Studio', icon: Clapperboard },
+  { to: '/works', label: 'Tác phẩm', icon: Film },
   { to: '/accounts', label: 'Nhập Muse', icon: KeyRound },
 ];
+const ADMIN_NAV = { to: '/admin', label: 'Quản trị', icon: ShieldCheck };
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const initial = (user?.name || user?.email || '?').slice(0, 1).toUpperCase();
+  const items = user?.role === 'admin' ? [...NAV, ADMIN_NAV] : NAV;
 
   return (
     <div className="relative flex h-full overflow-hidden bg-ink-900">
@@ -28,7 +32,7 @@ export default function Layout() {
         </button>
 
         <nav className="mt-8 flex w-full flex-col items-center gap-1.5 px-2">
-          {NAV.map((item) => (
+          {items.map((item) => (
             <NavItem key={item.to} {...item} />
           ))}
         </nav>
