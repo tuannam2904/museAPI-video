@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Sparkles, X, Loader2, RefreshCw, AlertTriangle, Image as ImageIcon, ChevronDown, Zap,
-  SlidersHorizontal, Clock, Check, Users, Bell, Trash2,
+  SlidersHorizontal, Clock, Check, Users, Bell, Trash2, Wand2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
@@ -41,6 +41,7 @@ export default function Create() {
   const [refs, setRefs] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [assisting, setAssisting] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [filter, setFilter] = useState('all');
   const [modelOpen, setModelOpen] = useState(false);
@@ -140,6 +141,31 @@ export default function Create() {
   };
 
   /* ---------- 生成 ---------- */
+  // Nhờ Muse viết lại câu lệnh bằng tiếng Việt (dùng tài khoản Muse đã liên kết)
+  const assistPrompt = async () => {
+    const idea = prompt.trim();
+    if (idea.length < 2) return toast('Nhập ý tưởng trước đã', 'error');
+    const kind = mode === 'image' ? 'ảnh' : 'video';
+    setAssisting(true);
+    try {
+      const out = await api.chat({
+        model: 'muse-spark',
+        messages: [
+          { role: 'system', content: 'Bạn là trợ lý viết prompt cho công cụ tạo video và ảnh AI. Người dùng mô tả ý tưởng bằng tiếng Việt. Nhiệm vụ của bạn: viết lại thành một prompt chi tiết, sinh động, sẵn sàng dùng để tạo video/ảnh. Chỉ trả về duy nhất nội dung prompt, không giải thích, không thêm tiêu đề hay dấu ngoặc kép bao quanh. Prompt viết bằng tiếng Việt.' },
+          { role: 'user', content: `Viết prompt ${kind}: ${idea}` },
+        ],
+      });
+      const content = out?.content?.trim();
+      if (!content) throw new Error('Muse không trả về nội dung');
+      setPrompt(content);
+      toast('Đã viết xong prompt', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setAssisting(false);
+    }
+  };
+
   const generate = async () => {
     if (prompt.trim().length < 2) return toast('Hãy nhập câu lệnh và chọn mô hình trước', 'error');
     if ((user?.credits ?? 0) < cost) return toast(`Không đủ điểm, lần này cần ${cost}`, 'error');
@@ -368,6 +394,15 @@ export default function Create() {
               <span className="pointer-events-none absolute bottom-2 right-3 font-mono text-[10.5px] text-mist-400">
                 {prompt.length}/1000
               </span>
+              <button
+                onClick={assistPrompt}
+                disabled={assisting || prompt.trim().length < 2}
+                title="Nhờ Muse viết lại prompt bằng tiếng Việt"
+                className="absolute bottom-2 left-3 flex h-7 items-center gap-1.5 rounded-lg border border-brand-400/30 px-2.5 text-[11.5px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+              >
+                {assisting ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
+              </button>
             </div>
 
             {/* 参考画面 */}
