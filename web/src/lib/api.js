@@ -56,6 +56,7 @@ export const api = {
   },
   job: (id) => request(`/api/jobs/${id}`),
   deleteJob: (id) => request(`/api/jobs/${id}`, { method: 'DELETE' }),
+  mediaStats: () => request('/api/media-stats'),
 
   upload: (files) => {
     const fd = new FormData();
@@ -66,6 +67,9 @@ export const api = {
   adminOverview: () => request('/api/admin/overview'),
   adminUsers: (q) => request(`/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   adminPatchUser: (id, b) => request(`/api/admin/users/${id}`, { method: 'PATCH', body: b }),
+  adminCreateUser: (b) => request('/api/admin/users', { method: 'POST', body: b }),
+  adminMediaStats: () => request('/api/admin/media-stats'),
+  adminMediaCleanup: () => request('/api/admin/media-cleanup', { method: 'POST' }),
   adminSettings: () => request('/api/admin/settings'),
   adminSaveSettings: (b) => request('/api/admin/settings', { method: 'PATCH', body: b }),
   adminSystem: () => request('/api/admin/system'),
@@ -94,6 +98,22 @@ export const api = {
   chatModels: () => request('/api/chat/models'),
   chat: (b) => request('/api/chat', { method: 'POST', body: b }),
   prompts: () => request('/api/prompts'),
+
+  films: () => request('/api/films'),
+  createFilm: (b) => request('/api/films', { method: 'POST', body: b }),
+  film: (id) => request(`/api/films/${id}`),
+  patchFilm: (id, b) => request(`/api/films/${id}`, { method: 'PATCH', body: b }),
+  deleteFilm: (id) => request(`/api/films/${id}`, { method: 'DELETE' }),
+  filmScript: (id) => request(`/api/films/${id}/script`, { method: 'POST' }),
+  filmStoryboard: (id) => request(`/api/films/${id}/storyboard`, { method: 'POST' }),
+  addFilmScene: (id, b) => request(`/api/films/${id}/scenes`, { method: 'POST', body: b }),
+  patchFilmScene: (id, sceneId, b) => request(`/api/films/${id}/scenes/${sceneId}`, { method: 'PATCH', body: b }),
+  deleteFilmScene: (id, sceneId) => request(`/api/films/${id}/scenes/${sceneId}`, { method: 'DELETE' }),
+  filmSceneImage: (id, sceneId) => request(`/api/films/${id}/scenes/${sceneId}/image`, { method: 'POST' }),
+  filmSceneVideo: (id, sceneId) => request(`/api/films/${id}/scenes/${sceneId}/video`, { method: 'POST' }),
+  filmSceneRetry: (id, sceneId) => request(`/api/films/${id}/scenes/${sceneId}/retry`, { method: 'POST' }),
+  filmGenerateAll: (id) => request(`/api/films/${id}/generate-all`, { method: 'POST' }),
+  filmStitch: (id) => request(`/api/films/${id}/stitch`, { method: 'POST' }),
 
   membership: () => request('/api/membership'),
   subscribe: (plan) => request('/api/membership', { method: 'POST', body: { plan } }),
