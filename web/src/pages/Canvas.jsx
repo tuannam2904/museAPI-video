@@ -30,8 +30,8 @@ const defaultDoc = () => ({
       type: 'text',
       x: 420,
       y: 240,
-      text: 'Nhập tại đây hoặc viết từ ô nhập phía dưới',
-      label: 'Văn bản 1',
+      text: '输入或从下方输入区写入',
+      label: '文本1',
     },
   ],
   links: [],
@@ -523,7 +523,7 @@ export default function Canvas() {
         </div>
 
         {/* 顶部工具栏 */}
-        <div className="absolute left-4 top-4 z-20 flex items-center gap-1 rounded-2xl border border-white/[0.07] bg-[#121726]/90 p-1.5 shadow-xl backdrop-blur">
+        <div className="absolute left-4 top-4 z-20 flex max-w-[calc(100%-32px)] flex-wrap items-center gap-1 rounded-2xl border border-white/[0.07] bg-[#121726]/90 p-1.5 shadow-xl backdrop-blur">
           <ToolBtn icon={MousePointer2} active={tool === 'select'} onClick={() => setTool('select')} title="Chọn (V)" />
           <ToolBtn icon={Hand} active={tool === 'hand'} onClick={() => setTool('hand')} title="Bàn tay (H)" />
           <Sep />
@@ -553,7 +553,7 @@ export default function Canvas() {
         <Minimap nodes={doc.nodes} view={view} vp={vpSize} heights={nodeHeights} />
 
         {/* 底部悬浮生成条 */}
-        <div className="absolute bottom-5 left-1/2 z-20 w-[min(760px,calc(100%-300px))] min-w-[420px] -translate-x-1/2">
+        <div className="absolute bottom-3 left-1/2 z-20 w-[min(760px,calc(100%-24px))] -translate-x-1/2 md:bottom-5 md:w-[min(760px,calc(100%-300px))]">
           <div className="mb-2 flex items-center justify-center gap-2">
             <span className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-[#121726]/90 px-3 py-1 text-[11px] text-mist-300 backdrop-blur">
               <span className={clsx('h-1.5 w-1.5 rounded-full', boundNode ? 'bg-brand-400' : 'bg-mist-400')} />
@@ -565,20 +565,20 @@ export default function Canvas() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2 rounded-2xl border border-brand-400/30 bg-[#121726]/95 p-2 shadow-[0_0_0_1px_rgba(79,227,193,.08),0_20px_50px_-20px_rgba(0,0,0,.9),0_0_40px_-18px_rgba(79,227,193,.5)] backdrop-blur-xl">
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-400/30 bg-[#121726]/95 p-2 shadow-[0_0_0_1px_rgba(79,227,193,.08),0_20px_50px_-20px_rgba(0,0,0,.9),0_0_40px_-18px_rgba(79,227,193,.5)] backdrop-blur-xl">
             <button
               onClick={() => addNode('image')}
               title="Thêm nút hình ảnh"
               className="flex h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-[12.5px] text-mist-200 transition hover:bg-white/5 hover:text-white"
             >
-              <ImagePlus size={16} /> Thêm hình ảnh
+              <ImagePlus size={16} /> <span className="hidden sm:inline">Thêm hình ảnh</span>
             </button>
             <input
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }}
               placeholder="Mô tả nội dung video bạn muốn tạo…"
-              className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.06] bg-[#0d111c] px-3.5 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
+              className="h-11 min-w-[140px] flex-1 basis-full rounded-xl border border-white/[0.06] bg-[#0d111c] px-3.5 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50 sm:basis-0"
             />
             <select
               value={duration}
