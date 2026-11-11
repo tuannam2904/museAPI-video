@@ -4,8 +4,10 @@ import { Router } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../auth.js';
 import { CFG, MEDIA_DIR } from '../config.js';
+import { mediaStatsForUser } from '../mediaCleanup.js';
 import {
   db, uid, now, createJob, getJob, updateJob, listJobs, addCredits, priceOf, getSettings,
+  getSetting,
 } from '../db.js';
 import * as muse from '../muse.js';
 
@@ -49,7 +51,7 @@ function toDataUrl(localUrl) {
   return `data:${mime};base64,${b64}`;
 }
 
-function normalizeRefs(list) {
+export function normalizeRefs(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
   for (const item of list) {
@@ -167,7 +169,13 @@ r.get('/jobs', requireAuth, (req, res) => {
     page,
     pageSize,
   });
-  res.json(out);
+  // Số ngày giữ file media — frontend dùng để tính đếm ngược "xóa sau …".
+  res.json({ ...out, mediaRetentionDays: Math.max(1, Number(getSetting('mediaRetentionDays') || 7)) });
+});
+
+/* Thống kê dung lượng media của CHÍNH user đang gọi (ai cũng xem được). */
+r.get('/media-stats', requireAuth, (req, res) => {
+  res.json(mediaStatsForUser(req.user.id));
 });
 
 r.get('/jobs/:id', requireAuth, (req, res) => {

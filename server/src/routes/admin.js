@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { requireAuth, requireAdmin, publicUser } from '../auth.js';
+import { requireAuth, requireAdmin, publicUser, createUser } from '../auth.js';
 import { db, addCredits, getSettings, setSetting, upsertAccount } from '../db.js';
+import { mediaStats, cleanupMedia } from '../mediaCleanup.js';
 import * as muse from '../muse.js';
 
 const r = Router();
@@ -29,6 +30,19 @@ r.get('/users', (req, res) => {
     ? db.prepare('SELECT * FROM users WHERE email LIKE ? ORDER BY created_at DESC LIMIT 200').all(`%${q}%`)
     : db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT 200').all();
   res.json({ users: rows.map(publicUser) });
+});
+
+r.post('/users', (req, res) => {
+  const { email, password, name, role } = req.body || {};
+  if (!email || !String(email).includes('@')) return res.status(400).json({ error: 'Email không hợp lệ' });
+  if (!password || String(password).length < 6) return res.status(400).json({ error: 'Mật khẩu ít nhất 6 ký tự' });
+  if (role && !['user', 'admin'].includes(role)) return res.status(400).json({ error: 'Role không hợp lệ' });
+  try {
+    const u = createUser({ email, password, name, role: role || 'user', credits: 0 });
+    res.json({ user: publicUser(u) });
+  } catch (e) {
+    res.status(400).json({ error: e.message.includes('UNIQUE') ? 'Email đã tồn tại' : e.message });
+  }
 });
 
 r.patch('/users/:id', (req, res) => {
@@ -95,8 +109,20 @@ r.get('/trend', (_req, res) => {
 });
 
 r.get('/settings', (_req, res) => res.json({ settings: getSettings() }));
+
+/* Thống kê dung lượng media trên server (để admin đặt mức trần + xem đã dùng bao nhiêu). */
+r.get('/media-stats', (_req, res) => res.json(mediaStats()));
+
+/* Dọn media ngay lập tức (quá hạn + vượt dung lượng), trả về kết quả dọn. */
+r.post('/media-cleanup', (_req, res) => {
+  try {
+    res.json(cleanupMedia());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 r.patch('/settings', (req, res) => {
-  const allow = ['siteName', 'signupCredits', 'priceVideoBase', 'priceVideoPerSecond', 'priceImage', 'allowRegister', 'notice'];
+  const allow = ['siteName', 'signupCredits', 'priceVideoBase', 'priceVideoPerSecond', 'priceImage', 'allowRegister', 'notice', 'mediaMaxMB', 'mediaRetentionDays', 'mediaGlobalMaxMB'];
   for (const [k, v] of Object.entries(req.body || {})) {
     if (allow.includes(k)) setSetting(k, v);
   }

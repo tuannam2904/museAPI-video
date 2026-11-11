@@ -18,7 +18,10 @@ function parseQuota(q) {
   if (!q.found && q.weekly_used_pct == null) return null;
 
   const raw = String(q.raw || '');
-  const tokens = raw.match(/剩余\s*([\d.]+\s*[亿万]?)\s*个词元/);
+  // Số tokens còn lại: ưu tiên dạng tiếng Trung "剩余 309 亿个词元",
+  // dự phòng dạng tiếng Anh "309 billion tokens remaining".
+  const tokens = raw.match(/剩余\s*([\d.]+\s*[亿万]?)\s*个词元/)
+    || raw.match(/([\d.]+\s*(?:billion|million|tỷ|triệu)?)\s*tokens?\s*(?:remaining|left|remained)/i);
 
   const usedPct = typeof q.weekly_used_pct === 'number' ? q.weekly_used_pct : null;
   return {
@@ -26,9 +29,30 @@ function parseQuota(q) {
     weeklyLeftPct: usedPct != null ? Math.max(0, Math.min(100, 100 - usedPct)) : null,
     weeklyReset: q.weekly_reset || null,
     tokensLeft: tokens ? tokens[1].replace(/\s+/g, '') : null,
+    extraLeft: q.extra_left || null,
+    extraUsedPct: typeof q.extra_used_pct === 'number' ? q.extra_used_pct : null,
+    plan: q.plan || null,
     checkedAt: q.checked_at || null,
     ok: q.found === true,
   };
+}
+
+/* Đếm số job đã tạo xong theo từng tài khoản upstream (jobs.account_id).
+ * Chỉ đếm job completed — đó mới là video/ảnh thực sự đã tạo ra. */
+function jobCountsByAccount() {
+  const rows = db.prepare(
+    `SELECT account_id, type, COUNT(*) AS c FROM jobs
+     WHERE status = 'completed' AND account_id IS NOT NULL
+     GROUP BY account_id, type`
+  ).all();
+  const map = new Map();
+  for (const r of rows) {
+    const e = map.get(r.account_id) || { video: 0, image: 0 };
+    if (r.type === 'video') e.video = r.c;
+    else if (r.type === 'image') e.image = r.c;
+    map.set(r.account_id, e);
+  }
+  return map;
 }
 
 /* ---------------------------- 免 F12 绑定 ----------------------------
@@ -135,12 +159,14 @@ r.get('/', requireAuth, async (req, res) => {
   const upstream = await syncFromUpstream();
   const upMap = new Map(upstream.map((a) => [a.id, a]));
   const local = localAccounts(req.user.role === 'admin' ? null : req.user.id);
+  const counts = jobCountsByAccount();
 
   const accounts = local.map((a) => {
     const up = a.upstream_id ? upMap.get(a.upstream_id) : null;
     let stored = null;
     try { stored = a.quota ? JSON.parse(a.quota) : null; } catch { stored = null; }
     const quota = parseQuota(up?.quota ?? stored);
+    const c = (a.upstream_id && counts.get(a.upstream_id)) || { video: 0, image: 0 };
     return {
       id: a.id,
       upstreamId: a.upstream_id,
@@ -152,6 +178,10 @@ r.get('/', requireAuth, async (req, res) => {
       expiresAt: up?.expires_at ?? a.expires_at,
       proxy: up?.proxy || null,
       quota,
+      useCount: typeof up?.use_count === 'number' ? up.use_count : null,
+      lastUsed: up?.last_used ? Math.round(Number(up.last_used)) : null,
+      videoCount: c.video,
+      imageCount: c.image,
       busy: !!up?.busy,
       createdAt: a.created_at,
     };
@@ -175,6 +205,9 @@ r.get('/', requireAuth, async (req, res) => {
     weeklyReset: withPct.map((a) => a.quota.weeklyReset).find(Boolean) || null,
     tokensLeft: usable.map((a) => a.quota?.tokensLeft).filter(Boolean),
     checkedAt: usable.map((a) => a.quota?.checkedAt).filter(Boolean).sort().pop() || null,
+    // Tổng số video/ảnh đã tạo xong (mọi tài khoản cộng lại)
+    totalVideos: accounts.reduce((s, a) => s + (a.videoCount || 0), 0),
+    totalImages: accounts.reduce((s, a) => s + (a.imageCount || 0), 0),
   };
 
   res.json({ accounts, summary, upstreamUp: upstream.length > 0 });
