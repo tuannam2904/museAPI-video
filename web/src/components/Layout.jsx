@@ -5,7 +5,6 @@ import { useAuth } from '../store/auth.jsx';
 
 /** 侧栏入口：快捷创作 / 无限画布 / Film Studio / 作品 / muse 导入 / 管理（仅 admin） */
 const NAV = [
-  { to: '/create', label: 'Tạo nhanh', icon: Sparkles },
   { to: '/canvas', label: 'Canvas vô hạn', icon: Workflow },
   { to: '/batch-video', label: 'Video hàng loạt', icon: Layers },
   { to: '/characters', label: 'Nhân vật', icon: Users },
@@ -26,7 +25,7 @@ export default function Layout() {
       {/* ---------------- 细侧栏 ---------------- */}
       <aside className="relative z-20 flex w-[84px] shrink-0 flex-col items-center border-r border-white/[0.05] bg-[#0b0f19] py-4">
         <button
-          onClick={() => nav('/create')}
+          onClick={() => nav('/canvas')}
           title="Aimi Muse Studio"
           className="mint-btn grid h-11 w-11 place-items-center rounded-2xl"
         >
