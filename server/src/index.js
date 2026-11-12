@@ -70,7 +70,7 @@ app.use('/api', genRoutes);
 // OpenAI 兼容对外接口（用 sk- 密钥鉴权，转发到上游）
 app.use('/v1', v1Routes);
 
-app.use('/api', (_req, res) => res.status(404).json({ error: '接口不存在' }));
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Không tìm thấy API' }));
 
 /* --------------------------- 前端产物（生产） --------------------------- */
 const webDist = path.join(ROOT, '..', 'web', 'dist');
@@ -91,7 +91,7 @@ if (fs.existsSync(webDist)) {
 app.use((err, _req, res, _next) => {
   console.error('[server] 未捕获异常:', err.message);
   if (res.headersSent) return;
-  res.status(err.status || 500).json({ error: err.message || '服务器内部错误' });
+  res.status(err.status || 500).json({ error: err.message || 'Lỗi máy chủ nội bộ' });
 });
 
 /* ------------------------------ 引导数据 ------------------------------ */
@@ -100,7 +100,7 @@ function bootstrap() {
   const password = process.env.ADMIN_PASSWORD || 'admin123456';
   const existing = findUserByEmail(email);
   if (!existing) {
-    createUser({ email, password, name: '管理员', role: 'admin', credits: 10000 });
+    createUser({ email, password, name: 'Quản trị viên', role: 'admin', credits: 10000 });
     console.log(`[server] 已创建管理员：${email} / ${password}`);
   }
   const n = db.prepare('SELECT COUNT(*) n FROM users').get().n;

@@ -27,7 +27,7 @@ export function createUser({ email, password, name, role = 'user', credits, invi
   db.prepare(
     'INSERT INTO users(id, email, password_hash, name, role, credits, status, created_at, invited_by) VALUES(?,?,?,?,?,?,?,?,?)'
   ).run(id, email.toLowerCase().trim(), hashPassword(password), name || null, role, 0, 'active', now(), invitedBy);
-  if (gift > 0) addCredits(id, gift, '注册赠送');
+  if (gift > 0) addCredits(id, gift, 'Tặng khi đăng ký');
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 }
 
@@ -58,20 +58,20 @@ export function findUserById(id) {
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
-  if (!token) return res.status(401).json({ error: '未登录' });
+  if (!token) return res.status(401).json({ error: 'Chưa đăng nhập' });
   try {
     const payload = jwt.verify(token, CFG.jwtSecret);
     const user = findUserById(payload.sub);
-    if (!user) return res.status(401).json({ error: '账号不存在' });
-    if (user.status !== 'active') return res.status(403).json({ error: '账号已被封禁' });
+    if (!user) return res.status(401).json({ error: 'Tài khoản không tồn tại' });
+    if (user.status !== 'active') return res.status(403).json({ error: 'Tài khoản đã bị khóa' });
     req.user = user;
     next();
   } catch {
-    return res.status(401).json({ error: '登录已过期，请重新登录' });
+    return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại' });
   }
 }
 
 export function requireAdmin(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: '需要管理员权限' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Cần quyền quản trị' });
   next();
 }

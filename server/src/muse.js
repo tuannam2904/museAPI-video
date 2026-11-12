@@ -30,12 +30,12 @@ async function call(pathname, { method = 'GET', body, raw = false, timeout = 120
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
     if (!res.ok) {
-      const msg = (data && (data.message || data.detail || data.error)) || `上游 HTTP ${res.status}`;
+      const msg = (data && (data.message || data.detail || data.error)) || `Lỗi HTTP ${res.status} từ upstream`;
       throw new MuseError(typeof msg === 'string' ? msg : JSON.stringify(msg), res.status, data);
     }
     return data;
   } catch (err) {
-    if (err.name === 'AbortError') throw new MuseError('上游请求超时', 504);
+    if (err.name === 'AbortError') throw new MuseError('Yêu cầu upstream đã hết thời gian chờ', 504);
     throw err;
   } finally {
     clearTimeout(timer);
@@ -133,7 +133,7 @@ export async function downloadMedia(mediaPathOrUrl, jobId, kind = 'video', timeo
     pathname = u.pathname + u.search;
   }
   const res = await call(pathname, { raw: true, timeout });
-  if (!res.ok) throw new MuseError(`媒体下载失败 HTTP ${res.status}`, res.status);
+  if (!res.ok) throw new MuseError(`Tải media thất bại HTTP ${res.status}`, res.status);
   const buf = Buffer.from(await res.arrayBuffer());
   const fileName = `${jobId}${extOf(pathname, kind)}`;
   const dest = path.join(MEDIA_DIR, fileName);

@@ -189,7 +189,7 @@ CREATE INDEX IF NOT EXISTS idx_replies_post ON replies(post_id, created_at);
 CREATE TABLE IF NOT EXISTS api_keys (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,
-  name       TEXT NOT NULL DEFAULT '默认密钥',
+  name       TEXT NOT NULL DEFAULT 'Khóa mặc định',
   key        TEXT NOT NULL UNIQUE,
   last_used  INTEGER,
   created_at INTEGER NOT NULL
@@ -226,7 +226,7 @@ export const now = () => Date.now();
 
 /* ------------------------------- settings ------------------------------- */
 const DEFAULT_SETTINGS = {
-  siteName: 'MuseAPI-Video',
+  siteName: 'Aimi Muse Studio',
   signupCredits: String(CFG.signupCredits),
   priceVideoBase: String(CFG.price.videoBase),
   priceVideoPerSecond: String(CFG.price.videoPerSecond),
@@ -261,7 +261,7 @@ export function getSetting(key) {
 /* -------------------------------- ledger -------------------------------- */
 export function addCredits(userId, delta, reason, jobId = null) {
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
-  if (!user) throw new Error('用户不存在');
+  if (!user) throw new Error('Người dùng không tồn tại');
   const after = user.credits + delta;
   db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(after, userId);
   db.prepare(
@@ -377,7 +377,7 @@ export function upsertAccount({ upstreamId, label, ownerId, status, expiresAt, q
   db.prepare(
     `INSERT INTO accounts(id, upstream_id, label, owner_id, status, expires_at, quota, note, created_at, synced_at)
      VALUES(?,?,?,?,?,?,?,?,?,?)`
-  ).run(id, upstreamId ?? null, label || 'Muse 账号', ownerId ?? null,
+  ).run(id, upstreamId ?? null, label || 'Tài khoản Muse', ownerId ?? null,
     status || 'unknown', expiresAt ?? null, quota ?? null, note ?? null, ts, ts);
   return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
 }

@@ -11,7 +11,7 @@ function failJob(job, message) {
   updateJob(job.id, { status: 'failed', error: String(message).slice(0, 500), finished_at: Date.now() });
   if (!job.refunded && job.cost > 0) {
     try {
-      addCredits(job.userId, job.cost, '任务失败退还', job.id);
+      addCredits(job.userId, job.cost, 'Hoàn điểm khi tác vụ thất bại', job.id);
       updateJob(job.id, { refunded: 1 });
       job.refunded = true;
     } catch (e) {
@@ -27,7 +27,7 @@ function settleDone(job, payload) {
     || payload?.video?.url
     || payload?.data?.[0]?.url
     || null;
-  if (!url) return failJob(job, '上游未返回媒体地址');
+  if (!url) return failJob(job, 'Upstream không trả về địa chỉ media');
   const kind = job.type === 'video' ? 'video' : 'image';
   const account = payload.account || null;
 
@@ -65,7 +65,7 @@ async function pollOne(job) {
   try {
     const limit = job.type === 'video' ? VIDEO_TIMEOUT_MS : IMAGE_TIMEOUT_MS;
     if (Date.now() - job.createdAt > limit) {
-      return failJob(job, '任务超时，请重试');
+      return failJob(job, 'Tác vụ đã hết thời gian chờ, vui lòng thử lại');
     }
 
     const data = job.type === 'video'
@@ -78,7 +78,7 @@ async function pollOne(job) {
     if (['completed', 'succeeded', 'success', 'done'].includes(status)) {
       settleDone(job, data);
     } else if (['failed', 'error', 'canceled', 'cancelled'].includes(status)) {
-      failJob(job, data.error || '上游生成失败');
+      failJob(job, data.error || 'Upstream tạo nội dung thất bại');
     } else {
       updateJob(job.id, {
         status: status === 'processing' ? 'processing' : (job.status === 'processing' ? 'processing' : 'queued'),
@@ -117,12 +117,12 @@ async function tickQueue() {
     const u = db.prepare('SELECT credits FROM users WHERE id = ?').get(q.user_id);
     if (!u || u.credits < cost) {
       db.prepare("UPDATE queue_items SET status = 'paused', note = ? WHERE id = ?")
-        .run(`积分不足（需 ${cost}），任务已暂停`, q.id);
+        .run(`Không đủ điểm (cần ${cost}), tác vụ đã tạm dừng`, q.id);
       continue;
     }
 
     const job = createJob(q.user_id, 'video', q.prompt, params, cost);
-    addCredits(q.user_id, -cost, '队列任务执行', job.id);
+    addCredits(q.user_id, -cost, 'Chạy tác vụ trong hàng đợi', job.id);
 
     try {
       const payload = {
@@ -133,7 +133,7 @@ async function tickQueue() {
       };
       const out = await createVideo(payload);
       const upstreamId = out?.id || out?.task_id;
-      if (!upstreamId) throw new Error('上游未返回任务 ID');
+      if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
 
       updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 15 });
       db.prepare("UPDATE queue_items SET status = 'running', job_id = ?, runs = runs + 1, last_run_at = ? WHERE id = ?")
@@ -141,7 +141,7 @@ async function tickQueue() {
       console.log(`[queue] 执行 ${q.id} → job ${job.id}`);
     } catch (e) {
       updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-      addCredits(q.user_id, cost, '队列任务失败退还', job.id);
+      addCredits(q.user_id, cost, 'Hoàn điểm khi tác vụ hàng đợi thất bại', job.id);
       updateJob(job.id, { refunded: 1 });
       db.prepare("UPDATE queue_items SET status = 'failed', note = ?, runs = runs + 1 WHERE id = ?")
         .run(String(e.message).slice(0, 200), q.id);
@@ -158,11 +158,11 @@ async function tickQueue() {
     const finished = job.status === 'completed';
     if (q.runs >= q.max_runs) {
       db.prepare("UPDATE queue_items SET status = ? , note = ? WHERE id = ?")
-        .run(finished ? 'done' : 'failed', finished ? '全部执行完成' : (job.error || '执行失败'), q.id);
+        .run(finished ? 'done' : 'failed', finished ? 'Đã chạy xong tất cả' : (job.error || 'Chạy thất bại'), q.id);
     } else {
       const next = Date.now() + q.interval_min * 60_000;
       db.prepare("UPDATE queue_items SET status = 'pending', next_run_at = ?, note = ? WHERE id = ?")
-        .run(next, finished ? '已执行，等待下次' : `本次失败：${String(job.error || '').slice(0, 60)}`, q.id);
+        .run(next, finished ? 'Đã chạy, đang chờ lần sau' : `Lần này thất bại: ${String(job.error || '').slice(0, 60)}`, q.id);
     }
   }
 }
