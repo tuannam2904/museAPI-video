@@ -114,6 +114,11 @@ export const api = {
   filmSceneRetry: (id, sceneId) => request(`/api/films/${id}/scenes/${sceneId}/retry`, { method: 'POST' }),
   filmGenerateAll: (id) => request(`/api/films/${id}/generate-all`, { method: 'POST' }),
   filmStitch: (id) => request(`/api/films/${id}/stitch`, { method: 'POST' }),
+  filmCharacters: (id) => request(`/api/films/${id}/characters`),
+  addFilmCharacter: (id, b) => request(`/api/films/${id}/characters`, { method: 'POST', body: b }),
+  patchFilmCharacter: (id, charId, b) => request(`/api/films/${id}/characters/${charId}`, { method: 'PATCH', body: b }),
+  deleteFilmCharacter: (id, charId) => request(`/api/films/${id}/characters/${charId}`, { method: 'DELETE' }),
+  filmCharacterPortrait: (id, charId) => request(`/api/films/${id}/characters/${charId}/portrait`, { method: 'POST' }),
 
   membership: () => request('/api/membership'),
   subscribe: (plan) => request('/api/membership', { method: 'POST', body: { plan } }),
