@@ -67,7 +67,22 @@ export const api = {
   },
 
   adminOverview: () => request('/api/admin/overview'),
-  adminUsers: (q) => request(`/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  adminUsers: (params) => {
+    const p = typeof params === 'string' ? { q: params } : (params || {});
+    const qs = new URLSearchParams();
+    if (p.q) qs.set('q', p.q);
+    if (p.role) qs.set('role', p.role);
+    if (p.status) qs.set('status', p.status);
+    if (p.sort) qs.set('sort', p.sort);
+    const s = qs.toString();
+    return request(`/api/admin/users${s ? `?${s}` : ''}`);
+  },
+  adminUserDetail: (id) => request(`/api/admin/users/${id}`),
+  adminDeleteUser: (id) => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
+  adminResetPassword: (id, password) => request(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: { password } }),
+  adminSetLimits: (id, limits) => request(`/api/admin/users/${id}/limits`, { method: 'PATCH', body: limits }),
+  adminLedger: (params) => request(`/api/admin/ledger?${new URLSearchParams(params || {})}`),
+  adminAudit: (limit) => request(`/api/admin/audit?limit=${limit || 100}`),
   adminPatchUser: (id, b) => request(`/api/admin/users/${id}`, { method: 'PATCH', body: b }),
   adminCreateUser: (b) => request('/api/admin/users', { method: 'POST', body: b }),
   adminMediaStats: () => request('/api/admin/media-stats'),
