@@ -1419,7 +1419,14 @@ export default function Canvas() {
             <button
               onClick={() => { setSideTab('nodes'); setSideOpen((v) => !v); }}
               title="Bảng bên (Node / Prompt)"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-mist-300 transition hover:bg-white/5 hover:text-white"
+              aria-label="Mở bảng bên"
+              aria-expanded={sideOpen}
+              className={clsx(
+                'grid h-9 w-9 shrink-0 place-items-center rounded-lg ring-1 transition',
+                sideOpen
+                  ? 'bg-brand-400/20 text-brand-300 ring-brand-400/40'
+                  : 'bg-white/[0.07] text-white ring-white/10 hover:bg-white/[0.12]'
+              )}
             >
               <Menu size={17} />
             </button>
@@ -1853,55 +1860,59 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
         );
       })}
 
-      <div className="mb-2.5 flex items-center justify-between">
+      {/* Hàng tiêu đề nút: chiều cao cố định (h-6) để khi đang nhập văn bản,
+          nút trợ giúp/Xong hiện ra cũng không làm nút đổi kích thước */}
+      <div className="mb-2.5 flex h-6 items-center justify-between">
         <span className="flex items-center gap-2 text-[13px] font-semibold text-white">
           <Icon size={15} className="text-brand-400" />
           {title}
         </span>
-        <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-mist-300">{role}</span>
+        <span className="flex items-center gap-1">
+          {isText && editing && (
+            <>
+              <button
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onAssist?.(); }}
+                disabled={assisting || !node.text?.trim()}
+                title="Nhờ Muse viết prompt"
+                aria-label="Nhờ Muse viết prompt"
+                className="grid h-6 w-6 place-items-center rounded-lg text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+              >
+                {assisting ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+              </button>
+              <button
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onTextDone?.(); }}
+                title="Xong"
+                aria-label="Xong"
+                className="grid h-6 w-6 place-items-center rounded-lg bg-brand-400/15 text-brand-300 transition hover:bg-brand-400/25"
+              >
+                <Check size={12} />
+              </button>
+            </>
+          )}
+          <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-mist-300">{role}</span>
+        </span>
       </div>
 
       {isText ? (
         editing ? (
-          // Nhập trực tiếp trong nút: ô nhập + nút nhờ Muse viết + nút Xong.
-          // Dùng onPointerDown + preventDefault cho 2 nút để bấm không làm
-          // textarea mất focus (mất focus sẽ đóng ô nhập trước khi nút chạy).
-          <div
-            className="rounded-xl border border-brand-400/50 bg-[#0d111c]/80"
+          // Nhập trực tiếp trong nút: ô nhập đúng bằng khung hiển thị (không làm
+          // nút đổi kích thước); cuộn chuột trên ô nhập thì cuộn text, không zoom canvas.
+          <textarea
+            autoFocus
+            value={node.text || ''}
+            onChange={(e) => onTextChange?.(e.target.value)}
+            onBlur={() => onTextDone?.()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') onTextDone?.();
+            }}
             onPointerDown={(e) => e.stopPropagation()}
-          >
-            <textarea
-              autoFocus
-              value={node.text || ''}
-              onChange={(e) => onTextChange?.(e.target.value)}
-              onBlur={() => onTextDone?.()}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === 'Escape') onTextDone?.();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              rows={4}
-              placeholder="Nhập câu lệnh…"
-              className="block min-h-[76px] w-full resize-none rounded-xl bg-transparent px-3 py-2.5 text-[12px] leading-relaxed text-mist-200 outline-none placeholder:text-mist-400/70"
-            />
-            <div className="flex items-center gap-1.5 border-t border-white/[0.06] px-2 py-1.5">
-              <button
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onAssist?.(); }}
-                disabled={assisting || !node.text?.trim()}
-                className="flex h-7 flex-1 items-center justify-center gap-1 rounded-lg text-[11px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
-              >
-                {assisting ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
-                {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
-              </button>
-              <button
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onTextDone?.(); }}
-                className="flex h-7 items-center gap-1 rounded-lg bg-brand-400/15 px-2.5 text-[11px] font-medium text-brand-300 transition hover:bg-brand-400/25"
-              >
-                <Check size={11} /> Xong
-              </button>
-            </div>
-          </div>
+            onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+            rows={4}
+            placeholder="Nhập câu lệnh…"
+            className="block min-h-[76px] w-full resize-none rounded-xl border border-brand-400/50 bg-[#0d111c]/80 px-3 py-2.5 text-[12px] leading-relaxed text-mist-200 outline-none placeholder:text-mist-400/70"
+          />
         ) : (
           <p className="line-clamp-4 min-h-[76px] rounded-xl border border-white/[0.06] bg-[#0d111c]/80 px-3 py-2.5 text-[12px] leading-relaxed text-mist-200">
             {node.text || 'Nhấn vào để nhập câu lệnh…'}
