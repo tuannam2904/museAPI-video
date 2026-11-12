@@ -47,6 +47,8 @@ export const api = {
   keepaliveAccount: (id) => request(`/api/accounts/${id}/keepalive`, { method: 'POST' }),
   updateAccountProxy: (id, proxy) => request(`/api/accounts/${id}/proxy`, { method: 'PATCH', body: { proxy } }),
   deleteAccount: (id) => request(`/api/accounts/${id}`, { method: 'DELETE' }),
+  setPromptWriter: (id) => request(`/api/accounts/${id}/prompt-writer`, { method: 'POST' }),
+  clearPromptWriter: (id) => request(`/api/accounts/${id}/prompt-writer`, { method: 'DELETE' }),
 
   createVideo: (b) => request('/api/videos', { method: 'POST', body: b }),
   createImage: (b) => request('/api/images', { method: 'POST', body: b }),
@@ -97,6 +99,7 @@ export const api = {
 
   chatModels: () => request('/api/chat/models'),
   chat: (b) => request('/api/chat', { method: 'POST', body: b }),
+  analyzeImage: (b) => request('/api/analyze-image', { method: 'POST', body: b }),
   prompts: () => request('/api/prompts'),
 
   films: () => request('/api/films'),
