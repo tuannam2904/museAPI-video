@@ -26,7 +26,7 @@ export default function Layout() {
       <aside className="relative z-20 flex w-[84px] shrink-0 flex-col items-center border-r border-white/[0.05] bg-[#0b0f19] py-4">
         <button
           onClick={() => nav('/create')}
-          title="MuseAPI-Video"
+          title="Aimi Muse Studio"
           className="mint-btn grid h-11 w-11 place-items-center rounded-2xl"
         >
           <Sparkles size={20} strokeWidth={2.2} />
