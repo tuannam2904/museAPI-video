@@ -14,14 +14,16 @@ const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
 const DURATIONS = [5, 8, 10];
 
-/* Bảng cấu hình NHỎ nổi ngay bên dưới nút được bấm (không phải drawer to).
-   Cha truyền style { left, top, width } đã tính theo vị trí nút trên màn hình.
-   - Nút văn bản: chỉ có ô nhập câu lệnh — nội dung này truyền vào các nút nối từ nó.
+/* Bảng cấu hình của nút ảnh/video — xổ xuống liền với nút (như menu thả xuống),
+   cùng chiều rộng với nút, mép chạm mép nút (placement 'below' = dưới nút,
+   'above' = trên nút khi không đủ chỗ bên dưới). Cha truyền style { left, top,
+   width } đã tính theo vị trí nút trên màn hình.
+   Nút văn bản KHÔNG dùng bảng này nữa — nhấn vào là nhập trực tiếp trong nút.
    - Nút ảnh: câu lệnh + tỉ lệ + "Tạo ảnh" (tạo ngay trong nút này) hoặc tải ảnh lên.
    - Nút video: câu lệnh + thời lượng + tỉ lệ + "Tạo video"; lấy tất cả ảnh/văn bản
      của các nút nối VÀO nó làm tham chiếu (nhiều nút ảnh cùng nối vào 1 nút video được). */
 export default function NodeInspector({
-  node, inputs, busy, style, onClose, onUpdate, onGenerate, onUpload, onDelete, onRemoveLink,
+  node, inputs, busy, style, placement = 'below', onClose, onUpdate, onGenerate, onUpload, onDelete, onRemoveLink,
   onToggleInput, onSizeChange,
 }) {
   const toast = useToast();
@@ -88,7 +90,11 @@ export default function NodeInspector({
         backgroundColor: theme.node.panelOverlay,
         borderColor: `color-mix(in srgb, ${theme.node.activeStroke} 30%, transparent)`,
       }}
-      className="absolute z-30 rounded-2xl border p-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,.9)] backdrop-blur-xl"
+      className={clsx(
+        'absolute z-30 border p-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,.9)] backdrop-blur-xl',
+        // Mép chạm nút thì bo nhỏ để trông liền một khối với nút
+        placement === 'below' ? 'rounded-b-2xl rounded-t-lg' : 'rounded-b-lg rounded-t-2xl'
+      )}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {/* Đầu: tên nút + trạng thái + đóng */}

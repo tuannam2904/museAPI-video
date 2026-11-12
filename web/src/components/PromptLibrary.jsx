@@ -81,10 +81,12 @@ export default function PromptLibrary({ open, onClose, onUse, embedded = false }
               className="h-9 w-full rounded-xl border border-white/[0.07] bg-[#0d111c] pl-9 pr-3 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
             />
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          {/* Mục phân loại: 1 hàng cuộn ngang (không wrap nhiều hàng chiếm chỗ,
+              để danh sách prompt hiện ra ngay bên dưới) */}
+          <div className="flex flex-nowrap gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
               onClick={() => setCat('all')}
-              className={clsx('rounded-full px-2.5 py-1 text-[11.5px] transition', cat === 'all' ? 'bg-brand-400/20 text-brand-300 ring-1 ring-brand-400/40' : 'bg-white/[0.04] text-mist-300 hover:bg-white/[0.08]')}
+              className={clsx('shrink-0 rounded-full px-2.5 py-1 text-[11.5px] transition', cat === 'all' ? 'bg-brand-400/20 text-brand-300 ring-1 ring-brand-400/40' : 'bg-white/[0.04] text-mist-300 hover:bg-white/[0.08]')}
             >
               Tất cả ({prompts?.length || 0})
             </button>
@@ -93,15 +95,12 @@ export default function PromptLibrary({ open, onClose, onUse, embedded = false }
                 key={name}
                 onClick={() => setCat(name)}
                 title={name}
-                className={clsx('max-w-[180px] truncate rounded-full px-2.5 py-1 text-[11.5px] transition', cat === name ? 'bg-brand-400/20 text-brand-300 ring-1 ring-brand-400/40' : 'bg-white/[0.04] text-mist-300 hover:bg-white/[0.08]')}
+                className={clsx('max-w-[180px] shrink-0 truncate rounded-full px-2.5 py-1 text-[11.5px] transition', cat === name ? 'bg-brand-400/20 text-brand-300 ring-1 ring-brand-400/40' : 'bg-white/[0.04] text-mist-300 hover:bg-white/[0.08]')}
               >
                 {shortCat(name)} ({n})
               </button>
             ))}
           </div>
-          <p className="text-[11px] leading-relaxed text-mist-400">
-            204 mẫu thật từ cộng đồng Muse Video (chủ yếu tiếng Trung, một ít tiếng Anh/Nhật). Bấm một mẫu để xem đầy đủ, rồi đưa vào Canvas.
-          </p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
