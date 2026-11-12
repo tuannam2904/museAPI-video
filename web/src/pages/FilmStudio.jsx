@@ -123,6 +123,16 @@ export default function FilmStudio() {
   const [stitching, setStitching] = useState(false);
   const [stitchingBusy, setStitchingBusy] = useState(false);
 
+  // Nhân vật tham chiếu
+  const [characters, setCharacters] = useState([]);
+  const [charName, setCharName] = useState('');
+  const [charDesc, setCharDesc] = useState('');
+  const [charPhotos, setCharPhotos] = useState([]);
+  const [charUploading, setCharUploading] = useState(false);
+  const [addingChar, setAddingChar] = useState(false);
+  const [portraitBusy, setPortraitBusy] = useState({});
+  const charFileRef = useRef(null);
+
   /* ---------------- tải dữ liệu ---------------- */
   const loadProjects = useCallback(async () => {
     setLoadingList(true);
@@ -148,6 +158,16 @@ export default function FilmStudio() {
     }
   }, [selectedId, toast]);
 
+  const loadCharacters = useCallback(async () => {
+    if (!selectedId) return;
+    try {
+      const out = await api.filmCharacters(selectedId);
+      setCharacters(out.characters || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }, [selectedId, toast]);
+
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
   useEffect(() => {
@@ -155,11 +175,16 @@ export default function FilmStudio() {
     initRef.current = null;
     setProject(null);
     setScenes([]);
+    setCharacters([]);
+    setCharName('');
+    setCharDesc('');
+    setCharPhotos([]);
     setGenerateMsg('');
     setStitching(false);
     setLoadingDetail(true);
     loadDetail().finally(() => setLoadingDetail(false));
-  }, [selectedId, loadDetail]);
+    loadCharacters();
+  }, [selectedId, loadDetail, loadCharacters]);
 
   // Khởi tạo nháp 1 lần khi dự án vừa tải xong
   useEffect(() => {
@@ -298,6 +323,77 @@ export default function FilmStudio() {
       toast(e.message, 'error');
     } finally {
       setSplitting(false);
+    }
+  };
+
+  /* ---------------- nhân vật tham chiếu ---------------- */
+  const onPickCharPhotos = async (files) => {
+    if (!files?.length) return;
+    if (charPhotos.length + files.length > 3) return toast('Tối đa 3 ảnh cho một nhân vật', 'error');
+    setCharUploading(true);
+    try {
+      const out = await api.upload(Array.from(files));
+      const urls = (out.files || []).map((f) => ({ url: f.url }));
+      setCharPhotos((r) => [...r, ...urls].slice(0, 3));
+      toast('Đã tải ảnh lên', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setCharUploading(false);
+      if (charFileRef.current) charFileRef.current.value = '';
+    }
+  };
+
+  const canSaveChar = charName.trim() && (charPhotos.length > 0 || charDesc.trim());
+
+  const addCharacter = async () => {
+    if (!canSaveChar) return toast('Nhập tên nhân vật và thêm ít nhất 1 ảnh hoặc mô tả', 'error');
+    setAddingChar(true);
+    try {
+      const out = await api.addFilmCharacter(project.id, {
+        name: charName.trim(), description: charDesc.trim(), photos: charPhotos,
+      });
+      if (out.character) setCharacters((l) => [...l, out.character]);
+      setCharName('');
+      setCharDesc('');
+      setCharPhotos([]);
+      toast('Đã thêm nhân vật', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setAddingChar(false);
+    }
+  };
+
+  const deleteCharacter = async (charId, name) => {
+    if (!window.confirm(`Xóa nhân vật "${name}"?`)) return;
+    try {
+      await api.deleteFilmCharacter(project.id, charId);
+      setCharacters((l) => l.filter((c) => c.id !== charId));
+      toast('Đã xóa nhân vật', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  const makePortrait = async (charId) => {
+    setPortraitBusy((m) => ({ ...m, [charId]: true }));
+    try {
+      const out = await api.filmCharacterPortrait(project.id, charId);
+      if (out.character) {
+        setCharacters((l) => l.map((c) => (c.id === charId ? out.character : c)));
+      } else {
+        await loadCharacters();
+      }
+      toast('Đã tạo ảnh chân dung', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setPortraitBusy((m) => {
+        const next = { ...m };
+        delete next[charId];
+        return next;
+      });
     }
   };
 
@@ -613,8 +709,115 @@ export default function FilmStudio() {
             <Button variant="soft" className="mt-3" loading={savingScript} onClick={saveScript}>Lưu kịch bản</Button>
           </StepCard>
 
-          {/* Bước 3 — Cảnh quay */}
-          <StepCard n={3} title="Cảnh quay" desc="Muse chia kịch bản thành từng cảnh theo trình tự câu chuyện, giữ ngoại hình nhân vật và trang phục nhất quán.">
+          {/* Bước 3 — Nhân vật tham chiếu */}
+          <StepCard n={3} title="Nhân vật tham chiếu" desc="Sau khi có kịch bản, định nghĩa các nhân vật chính tại đây để khuôn mặt giữ nhất quán giữa các cảnh. Khi một cảnh nhắc tên nhân vật, ảnh tham chiếu của nhân vật sẽ tự động gắn kèm khi tạo ảnh cho cảnh đó.">
+            {/* Danh sách nhân vật */}
+            {characters.length > 0 && (
+              <div className="mb-4 flex flex-col gap-3">
+                {characters.map((c) => (
+                  <article key={c.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3.5">
+                    <div className="flex items-start gap-3">
+                      {(c.photos || []).length > 0 ? (
+                        <div className="flex shrink-0 gap-1.5">
+                          {c.photos.slice(0, 3).map((p, i) => (
+                            <img key={i} src={p.url} alt={`${c.name} ${i + 1}`} className="h-14 w-14 rounded-lg border border-white/[0.06] object-cover" />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg border border-white/[0.06] bg-black/40 text-mist-400">
+                          <ImageIcon size={20} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-[14px] font-semibold text-white">{c.name}</h4>
+                        {c.description && <p className="mt-0.5 line-clamp-3 text-[12.5px] leading-relaxed text-mist-300">{c.description}</p>}
+                        {!c.description && <p className="mt-0.5 text-[12.5px] italic text-mist-400">Chưa có mô tả</p>}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        variant="soft" size="sm"
+                        loading={!!portraitBusy[c.id]}
+                        onClick={() => makePortrait(c.id)}
+                      >
+                        <ImageIcon size={14} /> Tạo ảnh chân dung
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => deleteCharacter(c.id, c.name)}>
+                        <Trash2 size={14} /> Xóa
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {/* Form thêm nhân vật */}
+            <Field label="Tên nhân vật">
+              <Input
+                value={charName}
+                onChange={(e) => setCharName(e.target.value)}
+                placeholder="Ví dụ: Mèo Cam, Bà cụ bán vé số…"
+              />
+            </Field>
+            <Field label="Mô tả nhân vật" className="mt-3">
+              <Textarea
+                rows={3}
+                value={charDesc}
+                onChange={(e) => setCharDesc(e.target.value)}
+                placeholder="Mô tả ngoại hình, trang phục, tuổi, đặc điểm nhận dạng…"
+              />
+            </Field>
+            <div className="mt-3">
+              <span className="mb-1.5 block text-[13px] font-medium text-mist-200">Ảnh tham chiếu (tối đa 3)</span>
+              {charPhotos.length > 0 && (
+                <div className="mb-2 flex gap-1.5">
+                  {charPhotos.map((p, i) => (
+                    <div key={i} className="relative">
+                      <img src={p.url} alt={`Ảnh ${i + 1}`} className="h-14 w-14 rounded-lg border border-white/[0.06] object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setCharPhotos((l) => l.filter((_, j) => j !== i))}
+                        className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-black/80 text-[11px] text-white ring-1 ring-white/20"
+                        aria-label="Gỡ ảnh"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={charFileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => onPickCharPhotos(e.target.files)}
+              />
+              <Button
+                variant="outline" size="sm"
+                loading={charUploading}
+                disabled={charPhotos.length >= 3}
+                onClick={() => charFileRef.current?.click()}
+              >
+                <Plus size={14} /> {charPhotos.length ? 'Thêm ảnh' : 'Tải ảnh lên'}
+              </Button>
+              <span className="ml-2 text-[12px] text-mist-400">{charPhotos.length}/3 ảnh</span>
+            </div>
+            <Button
+              className="mt-4" loading={addingChar}
+              disabled={!canSaveChar}
+              onClick={addCharacter}
+            >
+              <Plus size={15} /> Thêm nhân vật
+            </Button>
+            <p className="mt-3 text-[12.5px] text-mist-400">
+              Ảnh tham chiếu được gắn tự động vào cảnh có tên nhân vật khi tạo ảnh.
+            </p>
+          </StepCard>
+
+          {/* Bước 4 — Cảnh quay */}
+          <StepCard n={4} title="Cảnh quay" desc="Muse chia kịch bản thành từng cảnh theo trình tự câu chuyện, giữ ngoại hình nhân vật và trang phục nhất quán.">
             <div className="flex flex-wrap items-center gap-2">
               <Button loading={splitting} onClick={splitStoryboard}>
                 <Scissors size={15} /> {scenes.length ? 'Chia lại cảnh' : 'Chia cảnh'}
@@ -696,14 +899,14 @@ export default function FilmStudio() {
                       </button>
                       {promptOpen[scene.id] && (
                         <div className="mt-2 flex flex-col gap-2">
-                          <Field label="Prompt tạo ảnh (tiếng Anh)">
+                          <Field label="Prompt tạo ảnh (tiếng Việt)">
                             <Textarea
                               rows={3}
                               value={drafts.imagePrompt}
                               onChange={(e) => setPromptDrafts((m) => ({ ...m, [scene.id]: { ...drafts, imagePrompt: e.target.value } }))}
                             />
                           </Field>
-                          <Field label="Prompt tạo video (tiếng Anh)">
+                          <Field label="Prompt tạo video (tiếng Việt)">
                             <Textarea
                               rows={3}
                               value={drafts.videoPrompt}
@@ -756,8 +959,8 @@ export default function FilmStudio() {
             </div>
           </StepCard>
 
-          {/* Bước 4 — Tạo toàn bộ */}
-          <StepCard n={4} title="Tạo toàn bộ" desc="Tạo ảnh tham chiếu cho mọi cảnh trước, rồi tạo video cho mọi cảnh — chạy nền, nhiều luồng song song theo số tài khoản Muse đang bật.">
+          {/* Bước 5 — Tạo toàn bộ */}
+          <StepCard n={5} title="Tạo toàn bộ" desc="Tạo ảnh tham chiếu cho mọi cảnh trước, rồi tạo video cho mọi cảnh — chạy nền, nhiều luồng song song theo số tài khoản Muse đang bật.">
             <Button
               size="lg" className="w-full"
               loading={generatingAll || isGenerating}
@@ -774,8 +977,8 @@ export default function FilmStudio() {
             )}
           </StepCard>
 
-          {/* Bước 5 — Ghép & xuất */}
-          <StepCard n={5} title="Ghép & xuất" desc="Ghép các video cảnh theo đúng thứ tự thành một phim MP4 hoàn chỉnh.">
+          {/* Bước 6 — Ghép & xuất */}
+          <StepCard n={6} title="Ghép & xuất" desc="Ghép các video cảnh theo đúng thứ tự thành một phim MP4 hoàn chỉnh.">
             <Button
               size="lg" className="w-full" variant="outline"
               loading={stitchingBusy || stitching}
