@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Layers, BookOpen, Plus, X, Search, Download, RefreshCw, Trash2, Loader2,
-  Clock, Check, AlertTriangle, Square, Users, Play,
+  Clock, Check, AlertTriangle, Square, Users, Play, Wand2,
   Video as VideoIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -60,7 +60,10 @@ export default function BatchVideo() {
   const [duration, setDuration] = useState(5);
   const [refMode, setRefMode] = useState('shared');
   const [refs, setRefs] = useState([]);
+  const [refLabels, setRefLabels] = useState({});
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState('');
   const [running, setRunning] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState('');
@@ -319,6 +322,29 @@ export default function BatchVideo() {
     }
   };
 
+  /* ---------- phân tích ảnh tham chiếu → viết prompt tiếng Việt ---------- */
+  const analyzeRefs = async () => {
+    if (!refs.length || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const out = await api.analyzeImage({
+        images: refs.map((r) => ({ url: r.url, label: refLabels[r.url] || '' })),
+        motion: lines,
+      });
+      if (out.descriptions) setAnalysis(out.descriptions);
+      if (out.videoPrompt) {
+        setLines(out.videoPrompt);
+        toast('Đã viết prompt từ ảnh — bạn có thể sửa trước khi tạo', 'ok');
+      } else {
+        toast('Đã phân tích ảnh, nhưng chưa viết được prompt — hãy tự viết từ phần mô tả', 'info');
+      }
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   /* ---------- nhân vật: ảnh gắn theo tên trong prompt + nhân vật giữ nguyên ---------- */
   const charUrlsForPrompt = (prompt) => {
     const urls = [];
@@ -511,19 +537,34 @@ export default function BatchVideo() {
               {/* Ảnh tham chiếu */}
               <div>
                 <p className="mb-2 text-[13px] font-medium text-mist-200">Ảnh tham chiếu</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {refs.map((r) => (
-                    <div key={r.url} className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-[#0d111c] py-1 pl-1 pr-2">
-                      <img src={r.url} alt="" className="h-9 w-12 rounded-lg object-cover" />
-                      <span className="max-w-[110px] truncate text-[12px] text-mist-200">
-                        {r.name || r.url.split('/').pop()}
-                      </span>
-                      <button
-                        onClick={() => setRefs((l) => l.filter((x) => x.url !== r.url))}
-                        className="text-mist-400 hover:text-rose-400"
-                      >
-                        <X size={13} />
-                      </button>
+                <div className="flex flex-wrap items-start gap-2">
+                  {refs.map((r, i) => (
+                    <div key={r.url} className="w-full max-w-[230px]">
+                      <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-[#0d111c] py-1 pl-1 pr-2">
+                        <img src={r.url} alt="" className="h-9 w-12 rounded-lg object-cover" />
+                        <span className="max-w-[110px] truncate text-[12px] text-mist-200">
+                          {r.name || r.url.split('/').pop()}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setRefs((l) => l.filter((x) => x.url !== r.url));
+                            setRefLabels((m) => {
+                              const n = { ...m };
+                              delete n[r.url];
+                              return n;
+                            });
+                          }}
+                          className="text-mist-400 hover:text-rose-400"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                      <input
+                        value={refLabels[r.url] || ''}
+                        onChange={(e) => setRefLabels((m) => ({ ...m, [r.url]: e.target.value }))}
+                        placeholder={`Ảnh ${i + 1}: ai, đang làm gì — ví dụ: Mai, đang rót cà phê`}
+                        className="mt-1 h-8 w-full rounded-lg border border-white/[0.07] bg-[#0d111c] px-2.5 text-[12px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
+                      />
                     </div>
                   ))}
                   {refs.length < 3 && (
@@ -540,6 +581,21 @@ export default function BatchVideo() {
                   )}
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPick(e.target.files)} />
+                {refs.length > 0 && (
+                  <button
+                    onClick={analyzeRefs}
+                    disabled={analyzing}
+                    className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-400/30 text-[12.5px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+                  >
+                    {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+                    {analyzing ? 'Đang đọc ảnh…' : 'Phân tích ảnh'}
+                  </button>
+                )}
+                {analysis && (
+                  <div className="mt-2 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/[0.07] bg-[#0d111c] p-3 text-[12px] leading-relaxed text-mist-300">
+                    {analysis}
+                  </div>
+                )}
               </div>
 
               {/* Nhân vật */}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Plus, Trash2, RefreshCw, ShieldCheck, KeyRound, ClipboardPaste, ExternalLink, ChevronDown, Info,
   Link2, Copy, CheckCircle2, Loader2, HelpCircle, Search, Activity, Download, Clipboard, Lock, Globe,
-  Video, Image as ImageIcon,
+  Video, Image as ImageIcon, Wand2, ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
@@ -41,6 +41,26 @@ export default function Accounts() {
   const [guide, setGuide] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [q, setQ] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+
+  // Đặt / gỡ tài khoản chuyên viết prompt (chỉ một tài khoản được chỉ định)
+  const togglePromptWriter = async (acc) => {
+    setBusyId(acc.id);
+    try {
+      if (acc.isPromptWriter) {
+        await api.clearPromptWriter(acc.id);
+        toast('Đã gỡ vai trò viết prompt', 'ok');
+      } else {
+        await api.setPromptWriter(acc.id);
+        toast(`«${acc.label}» sẽ viết prompt cho mọi tính năng`, 'ok');
+      }
+      await load();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -197,10 +217,10 @@ export default function Accounts() {
         </div>
       </div>
 
-      {/* 列表 */}
+      {/* 列表 — hàng gọn, bấm để mở chi tiết */}
       {loading && !list.length ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => <div key={i} className="shimmer h-[178px] rounded-2xl" />)}
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => <div key={i} className="shimmer h-[64px] rounded-xl" />)}
         </div>
       ) : list.length === 0 ? (
         <div className="panel">
@@ -219,17 +239,20 @@ export default function Accounts() {
       ) : shown.length === 0 ? (
         <p className="py-16 text-center text-[13px] text-mist-400">Không có tài khoản nào khớp bộ lọc</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-2">
           {shown.map((a) => (
-            <AccountCard
+            <AccountRow
               key={a.id}
               a={a}
               busy={busyId === a.id}
+              expanded={expandedId === a.id}
+              onToggleExpand={() => setExpandedId((v) => (v === a.id ? null : a.id))}
               onTest={() => act(a.id, api.testAccount, 'Kiểm tra xong')}
               onKeepalive={() => act(a.id, api.keepaliveAccount, 'Đã thử gia hạn')}
               onRemove={() => remove(a)}
               onQuota={() => refreshQuota(a)}
               onProxy={() => setProxyAcc(a)}
+              onPromptWriter={() => togglePromptWriter(a)}
             />
           ))}
         </div>
@@ -270,40 +293,100 @@ const AVATAR_GRADS = [
 ];
 const gradFor = (id = '') => AVATAR_GRADS[[...String(id)].reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_GRADS.length];
 
-function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota, onProxy }) {
+function AccountRow({ a, busy, expanded, onToggleExpand, onTest, onKeepalive, onRemove, onQuota, onProxy, onPromptWriter }) {
   const st = STATUS[a.status] || STATUS.unknown;
   const expiring = a.expiresAt && a.expiresAt * 1000 - Date.now() < 6 * 3600 * 1000;
   const left = a.quota?.weeklyLeftPct;
+  const sub = [
+    a.expiresAt
+      ? `Hiệu lực đến ${new Date(a.expiresAt * 1000).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+      : null,
+    a.proxy?.server ? `Proxy: ${a.proxy.server}` : null,
+    a.note || null,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <div className="card card-hover flex flex-col p-5">
-      <div className="flex items-start gap-3">
-        <span className={clsx('h-12 w-12 shrink-0 rounded-full bg-gradient-to-br shadow-inner', gradFor(a.id || a.upstreamId))} />
+    <div
+      className={clsx(
+        'overflow-hidden rounded-xl border transition',
+        a.isPromptWriter
+          ? 'border-l-4 border-l-brand-400 border-y-white/[0.08] border-r-white/[0.08] bg-brand-500/[0.06]'
+          : 'border-white/[0.07] bg-white/[0.02] hover:border-white/[0.12]'
+      )}
+    >
+      {/* Hàng gọn — bấm để mở / thu chi tiết */}
+      <div
+        className="flex min-h-[64px] cursor-pointer items-center gap-3 px-3 py-2"
+        onClick={onToggleExpand}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleExpand(); } }}
+      >
+        <span className={clsx('h-9 w-9 shrink-0 rounded-full bg-gradient-to-br shadow-inner', gradFor(a.id || a.upstreamId))} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold text-white" title={a.label}>{a.label}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-[13.5px] font-semibold text-white" title={a.label}>{a.label}</p>
             <Badge tone={st.tone} dot>{st.label}</Badge>
             {a.shared && <Badge tone="brand">Kho chung</Badge>}
+            {a.isPromptWriter && <Badge tone="brand">Viết prompt</Badge>}
           </div>
+          {sub && <p className="mt-0.5 truncate text-[11.5px] text-mist-400" title={sub}>{sub}</p>}
         </div>
-        <span className="font-mono text-[10px] text-ink-500" title={a.upstreamId}>
-          {a.upstreamId ? `#${a.upstreamId.slice(0, 6)}` : ''}
-        </span>
+        <div className="hidden shrink-0 items-center gap-3 text-[12px] text-mist-300 md:flex">
+          {left != null ? (
+            <span className="whitespace-nowrap" title={`Hạn mức tuần còn ${left}%`}>
+              Còn <b className="text-brand-300">{left}%</b>
+              {a.quota?.plan && <span className="ml-1 text-[11px] text-ink-500">{a.quota.plan}</span>}
+            </span>
+          ) : (
+            <span className="whitespace-nowrap text-amber-300">Chưa đọc được</span>
+          )}
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            <Video size={12} className="text-brand-400" />
+            {a.videoCount ?? 0} video · {a.imageCount ?? 0} ảnh
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <IconBtn title="Kiểm tra" disabled={busy} onClick={onTest}><ShieldCheck size={14} /></IconBtn>
+          <IconBtn title="Duy trì" disabled={busy} onClick={onKeepalive}><Activity size={14} /></IconBtn>
+          <IconBtn title="Proxy" disabled={busy} onClick={onProxy}><Globe size={14} /></IconBtn>
+          <IconBtn
+            title={a.isPromptWriter ? 'Gỡ vai trò viết prompt' : 'Đặt làm tài khoản viết prompt'}
+            disabled={busy}
+            active={!!a.isPromptWriter}
+            onClick={onPromptWriter}
+          >
+            <Wand2 size={14} />
+          </IconBtn>
+          <IconBtn title="Xóa" danger disabled={busy} onClick={onRemove}><Trash2 size={14} /></IconBtn>
+          <ChevronRight
+            size={15}
+            className={clsx('ml-0.5 shrink-0 text-mist-400 transition-transform', expanded && 'rotate-90')}
+          />
+        </div>
       </div>
 
-      <div className="mt-4">
-        {left != null ? (
-          <>
-            <div className="flex items-baseline justify-between">
-              <span className="text-[12.5px] text-mist-300">
-                Hạn mức tuần <b className="ml-1 text-[18px] font-semibold text-brand-300">{left}%</b>
-                <span className="text-mist-400"> / 100%</span>
-                {a.quota?.plan && <span className="ml-2 text-[11px] text-ink-500">{a.quota.plan}</span>}
-              </span>
-              <button onClick={onQuota} disabled={busy} title="Làm mới hạn mức" className="text-mist-400 hover:text-brand-300 disabled:opacity-40">
-                <RefreshCw size={12} />
-              </button>
-            </div>
+      {/* Chi tiết — chỉ hiện khi mở */}
+      {expanded && (
+        <div className="fade-in border-t border-white/[0.06] px-3 py-3 text-[12px]">
+          <div className="flex items-baseline justify-between">
+            <span className="text-mist-300">
+              Hạn mức tuần{' '}
+              {left != null ? (
+                <>
+                  <b className="ml-1 text-[16px] font-semibold text-brand-300">{left}%</b>
+                  <span className="text-mist-400"> / 100%</span>
+                  {a.quota?.plan && <span className="ml-2 text-[11px] text-ink-500">{a.quota.plan}</span>}
+                </>
+              ) : (
+                <b className="ml-1 text-[14px] font-semibold text-amber-300">Chưa đọc được</b>
+              )}
+            </span>
+            <button onClick={onQuota} disabled={busy} className="text-[12px] text-brand-400 hover:text-brand-300 disabled:opacity-50">
+              {busy ? 'Đang tra cứu…' : left != null ? 'Làm mới hạn mức' : 'Bấm để tra cứu'}
+            </button>
+          </div>
+          {left != null ? (
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
               <div
                 className={clsx(
@@ -313,76 +396,68 @@ function AccountCard({ a, busy, onTest, onKeepalive, onRemove, onQuota, onProxy 
                 style={{ width: `${Math.max(2, left)}%` }}
               />
             </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-baseline justify-between">
-              <span className="text-[12.5px] text-mist-300">
-                Hạn mức tuần <b className="ml-1 text-[15px] font-semibold text-amber-300">Chưa đọc được</b>
-              </span>
-              <button onClick={onQuota} disabled={busy} className="text-[12px] text-brand-400 hover:text-brand-300 disabled:opacity-50">
-                {busy ? 'Đang tra cứu…' : 'Bấm để tra cứu'}
-              </button>
-            </div>
-            <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]" />
-            <p className="mt-2 text-[11.5px] leading-relaxed text-mist-400">
-              Muse chưa đọc được bảng Usage của tài khoản này (phiên vẫn khả dụng).
-              Bấm «Tra cứu» để đọc lại — nếu vẫn không được thì hạn mức tuần tạm thời chưa rõ.
-            </p>
-          </>
-        )}
-        {/* Số lượng đã tạo bằng tài khoản này + số lần upstream đã dùng nó */}
-        <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-mist-300">
-          <span className="flex items-center gap-1.5">
-            <Video size={13} className="text-brand-400" />
-            Đã tạo <b className="text-white">{a.videoCount ?? 0} video</b>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <ImageIcon size={13} className="text-brand-400" />
-            <b className="text-white">{a.imageCount ?? 0} ảnh</b>
-          </span>
-          {a.useCount != null && (
-            <span className="text-mist-400">
-              Upstream đã dùng <b className="text-mist-200">{a.useCount} lần</b>
-              {a.lastUsed ? ` · lần cuối ${fmtAgo(a.lastUsed * 1000)}` : ''}
-            </span>
+          ) : (
+            <>
+              <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]" />
+              <p className="mt-2 text-[11.5px] leading-relaxed text-mist-400">
+                Muse chưa đọc được bảng Usage của tài khoản này (phiên vẫn khả dụng).
+                Bấm «Tra cứu» để đọc lại — nếu vẫn không được thì hạn mức tuần tạm thời chưa rõ.
+              </p>
+            </>
           )}
-        </p>
-        <p className="mt-2 flex flex-wrap gap-x-3 text-[11.5px] text-mist-400">
-          <span>
-            Hiệu lực đến{' '}
-            <span className={clsx('font-mono', expiring ? 'text-amber-300' : 'text-mist-300')}>
-              {a.expiresAt ? new Date(a.expiresAt * 1000).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+          <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-mist-300">
+            <span className="flex items-center gap-1.5">
+              <Video size={13} className="text-brand-400" />
+              Đã tạo <b className="text-white">{a.videoCount ?? 0} video</b>
             </span>
-          </span>
-          {a.quota?.weeklyReset && <span>Đặt lại vào {a.quota.weeklyReset}</span>}
-          {a.quota?.tokensLeft && <span>Thêm {a.quota.tokensLeft} tokens</span>}
-          {a.quota?.extraLeft && <span>Tokens thêm còn {a.quota.extraLeft}</span>}
-          {a.proxy?.server && <span>Proxy: {a.proxy.server}</span>}
-        </p>
-        {a.note && <p className="mt-1 truncate text-[11px] text-ink-500" title={a.note}>{a.note}</p>}
-      </div>
-
-      <div className="mt-4 flex items-center gap-2">
-        <Button variant="soft" size="sm" loading={busy} onClick={onTest}>
-          {!busy && <ShieldCheck size={13} />} Kiểm tra
-        </Button>
-        <Button variant="soft" size="sm" disabled={busy} onClick={onKeepalive}>
-          <Activity size={13} /> Duy trì
-        </Button>
-        <Button variant="soft" size="sm" disabled={busy} onClick={onProxy}>
-          <Globe size={13} /> Proxy
-        </Button>
-        <button
-          onClick={onRemove}
-          disabled={busy}
-          title="Xóa"
-          className="ml-auto grid h-8 w-8 place-items-center rounded-xl border border-rose-500/25 text-rose-400 transition hover:bg-rose-500/10 disabled:opacity-40"
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
+            <span className="flex items-center gap-1.5">
+              <ImageIcon size={13} className="text-brand-400" />
+              <b className="text-white">{a.imageCount ?? 0} ảnh</b>
+            </span>
+            {a.useCount != null && (
+              <span className="text-mist-400">
+                Upstream đã dùng <b className="text-mist-200">{a.useCount} lần</b>
+                {a.lastUsed ? ` · lần cuối ${fmtAgo(a.lastUsed * 1000)}` : ''}
+              </span>
+            )}
+          </p>
+          <p className="mt-2 flex flex-wrap gap-x-3 text-[11.5px] text-mist-400">
+            <span>
+              Hiệu lực đến{' '}
+              <span className={clsx('font-mono', expiring ? 'text-amber-300' : 'text-mist-300')}>
+                {a.expiresAt ? new Date(a.expiresAt * 1000).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+              </span>
+            </span>
+            {a.quota?.weeklyReset && <span>Đặt lại vào {a.quota.weeklyReset}</span>}
+            {a.quota?.tokensLeft && <span>Thêm {a.quota.tokensLeft} tokens</span>}
+            {a.quota?.extraLeft && <span>Tokens thêm còn {a.quota.extraLeft}</span>}
+            {a.proxy?.server && <span>Proxy: {a.proxy.server}</span>}
+            {a.upstreamId && <span className="font-mono text-[10px] text-ink-500">#{a.upstreamId.slice(0, 6)}</span>}
+          </p>
+          {a.note && <p className="mt-1 text-[11px] text-ink-500">{a.note}</p>}
+        </div>
+      )}
     </div>
+  );
+}
+
+function IconBtn({ children, title, onClick, disabled, danger, active }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={clsx(
+        'grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition disabled:opacity-40',
+        active
+          ? 'border-brand-400/50 bg-brand-500/20 text-brand-300'
+          : danger
+            ? 'border-rose-500/25 text-rose-400 hover:bg-rose-500/10'
+            : 'border-white/[0.07] text-mist-300 hover:bg-white/5 hover:text-white'
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
