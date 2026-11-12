@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Layers, BookOpen, Plus, X, Search, Download, RefreshCw, Trash2, Loader2,
-  Clock, Check, AlertTriangle, Square, Users,
+  Clock, Check, AlertTriangle, Square, Users, Play,
   Video as VideoIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
