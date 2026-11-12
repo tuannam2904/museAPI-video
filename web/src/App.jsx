@@ -6,6 +6,7 @@ import Login from './pages/Login.jsx';
 import Create from './pages/Create.jsx';
 import Canvas from './pages/Canvas.jsx';
 import BatchVideo from './pages/BatchVideo.jsx';
+import Characters from './pages/Characters.jsx';
 import Accounts from './pages/Accounts.jsx';
 import FilmStudio from './pages/FilmStudio.jsx';
 import Works from './pages/Works.jsx';
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/create" element={<Create />} />
           <Route path="/canvas" element={<Canvas />} />
           <Route path="/batch-video" element={<BatchVideo />} />
+          <Route path="/characters" element={<Characters />} />
           <Route path="/film-studio" element={<FilmStudio />} />
           <Route path="/works" element={<Works />} />
           <Route path="/accounts" element={<Accounts />} />
