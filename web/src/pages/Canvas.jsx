@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Type, Image as ImageIcon, Video, Trash2, Maximize, Loader2, X, Sparkles,
+  Type, Image as ImageIcon, Video, Trash2, Maximize, Loader2, X, Sparkles, Wand2, Check,
   MousePointer2, Hand, ImagePlus, Expand, Clapperboard,
   Download, Undo2, Redo2, Menu, Palette, Eraser, Crosshair, Sun, Moon,
   Group, Ungroup,
@@ -33,6 +33,10 @@ const NODE_H = 170;
 // nodeH/2, chấm tròn ở top-1/2 của node thật, nên 2 số này phải khớp nhau thì
 // đường mới chạm đúng tâm chấm tròn.
 const nodeHGuess = (n) => (n.type === 'text' ? 174 : 214);
+
+// Nhờ Muse viết lại câu lệnh (dùng tài khoản Muse đã liên kết) — dùng chung
+// cho nút văn bản đang nhập trực tiếp (trước đây nằm trong NodeInspector).
+const ASSIST_SYSTEM = 'Bạn là trợ lý viết prompt cho công cụ tạo video và ảnh AI. Người dùng mô tả ý tưởng bằng tiếng Việt. Nhiệm vụ của bạn: viết lại thành một prompt chi tiết, sinh động, sẵn sàng dùng để tạo video/ảnh. Chỉ trả về duy nhất nội dung prompt, không giải thích, không thêm tiêu đề hay dấu ngoặc kép bao quanh. Prompt viết bằng tiếng Việt.';
 
 // Snapshot {nodes, links} cho lịch sử hoàn tác (deep copy)
 const snapshotDoc = (d) => JSON.parse(JSON.stringify({ nodes: d.nodes, links: d.links || [] }));
@@ -93,6 +97,8 @@ export default function Canvas() {
   const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
   const inspectorIdRef = useRef(null);
   inspectorIdRef.current = inspectorId;
+  const [editingTextId, setEditingTextId] = useState(null); // id nút văn bản đang nhập trực tiếp trong nút
+  const [assistingText, setAssistingText] = useState(false); // đang nhờ Muse viết lại câu lệnh của nút văn bản
   const [viewing, setViewing] = useState(null); // nút đang mở xem video/ảnh to
   const [sideOpen, setSideOpen] = useState(false); // bảng bên trái (tab Node / Prompt)
   const [sideTab, setSideTab] = useState('nodes'); // tab mặc định khi mở bảng bên
@@ -287,6 +293,7 @@ export default function Canvas() {
     }
     setSelected([]);
     setInspectorId(null);
+    setEditingTextId(null);
     dragRef.current = {
       mode: 'pan',
       startX: e.clientX,
@@ -503,7 +510,8 @@ export default function Canvas() {
         return;
       }
       if (d.mode === 'node') {
-        // Bấm (không kéo) vào nút: bấm vào ảnh/video thì mở xem to, bấm chỗ khác mở bảng cấu hình
+        // Bấm (không kéo) vào nút: bấm vào ảnh/video thì mở xem to; nút văn bản
+        // thì nhập trực tiếp trong nút; nút ảnh/video thì mở bảng cấu hình
         const moved = e && e.clientX != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
         if (moved < 6) {
           if (d.fromMedia) {
@@ -512,7 +520,13 @@ export default function Canvas() {
           } else {
             const node = docRef.current.nodes.find((n) => n.id === d.id);
             // Nhóm không có bảng cấu hình riêng
-            if (node?.type !== 'group') setInspectorId(d.id);
+            if (node?.type === 'text') {
+              setInspectorId(null);
+              setEditingTextId(d.id);
+            } else if (node?.type !== 'group') {
+              setEditingTextId(null);
+              setInspectorId(d.id);
+            }
           }
           return;
         }
@@ -703,6 +717,7 @@ export default function Canvas() {
       if (e.key === 'Escape') {
         setSelected([]);
         setInspectorId(null);
+        setEditingTextId(null);
         setSideOpen(false);
         setBox(null);
         if (dragRef.current?.mode === 'link') { dragRef.current = null; setLinkDrag(null); }
@@ -725,12 +740,18 @@ export default function Canvas() {
       x: Math.round(center.x - NODE_W / 2 + (Math.random() * 40 - 20)),
       y: Math.round(center.y - NODE_H / 2 + (Math.random() * 40 - 20)),
       width: NODE_W,
-      text: type === 'text' ? 'Nhấp đúp để nhập hoặc viết từ ô nhập phía dưới' : '',
+      text: '',
       label: type === 'text' ? 'Văn bản' : type === 'image' ? 'Hình ảnh' : 'Video',
     };
     setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
     setSelected([n.id]);
-    setInspectorId(n.id);
+    if (type === 'text') {
+      setInspectorId(null);
+      setEditingTextId(n.id); // nút văn bản mới: nhập trực tiếp ngay, không mở bảng
+    } else {
+      setEditingTextId(null);
+      setInspectorId(n.id);
+    }
   };
 
   const removeSelected = () => {
@@ -800,7 +821,8 @@ export default function Canvas() {
     };
     setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
     setSelected([n.id]);
-    setInspectorId(n.id);
+    setInspectorId(null);
+    setEditingTextId(n.id); // mở nhập trực tiếp để xem/sửa prompt vừa đưa vào
     toast('Đã đưa prompt vào Canvas', 'ok');
   };
 
@@ -935,10 +957,35 @@ export default function Canvas() {
     setDoc((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }));
   };
 
+  // Nhờ Muse viết lại câu lệnh của nút văn bản đang nhập trực tiếp
+  const assistNodeText = async (node) => {
+    const idea = node.text?.trim();
+    if (!idea) return toast('Nhập ý tưởng trước đã', 'error');
+    setAssistingText(true);
+    try {
+      const out = await api.chat({
+        model: 'muse-spark',
+        messages: [
+          { role: 'system', content: ASSIST_SYSTEM },
+          { role: 'user', content: `Viết prompt video/ảnh: ${idea}` },
+        ],
+      });
+      const content = out?.content?.trim();
+      if (!content) throw new Error('Muse không trả về nội dung');
+      updateNode(node.id, { text: content });
+      toast('Đã viết xong prompt', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setAssistingText(false);
+    }
+  };
+
   const deleteNode = (id) => {
     setDoc((d) => removeNodes(d, [id]));
     setSelected((s) => s.filter((i) => i !== id));
     setInspectorId(null);
+    setEditingTextId(null);
   };
 
   // Đổi tên nhóm (nhấp đúp vào khung nhóm)
@@ -1152,7 +1199,13 @@ export default function Canvas() {
     const b = nodeBounds(node, nodeH);
     centerOnWorld(b.x + b.w / 2, b.y + b.h / 2);
     setSelected([node.id]);
-    setInspectorId(node.id);
+    if (node.type === 'text') {
+      setInspectorId(null);
+      setEditingTextId(node.id);
+    } else {
+      setEditingTextId(null);
+      setInspectorId(node.id);
+    }
   };
 
   /* ---------------- 生成 ---------------- */
@@ -1207,27 +1260,33 @@ export default function Canvas() {
   const nodeById = Object.fromEntries(doc.nodes.map((n) => [n.id, n]));
   const links = (doc.links || []).filter((l) => nodeById[l.from] && nodeById[l.to]);
 
-  // Vị trí bảng cấu hình nhỏ: nổi ngay bên dưới nút đang chọn (tính theo màn hình).
-  // Bảng phóng to theo mức zoom (giới hạn 0.7–1.5x) để không bị nhỏ đi so với nút
-  // khi zoom to — trước đây bảng cố định 280px nên zoom càng to, nút càng lớn
-  // thì bảng trông càng nhỏ. Gần mép dưới thì lật lên trên nút.
+  // Vị trí bảng cấu hình: xổ xuống liền với nút đang chọn, cùng chiều rộng
+  // với nút (như menu thả xuống), không rời rạc. Bảng phóng to theo mức zoom
+  // (giới hạn 0.7–1.5x) nên chiều rộng CSS tính ngược lại để sau khi scale
+  // bằng đúng chiều rộng hiển thị của nút. Không đủ chỗ bên dưới thì lật lên
+  // trên nút (vẫn liền, mép dưới bảng chạm mép trên nút).
   const inspectorNode = inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null;
-  const panelStyle = inspectorNode ? (() => {
-    const PANEL_W = 280;
+  const panelInfo = inspectorNode ? (() => {
     const PANEL_H = 260;
     const s = Math.min(1.5, Math.max(0.7, view.z)); // tỉ lệ bảng theo zoom
-    const scaledW = PANEL_W * s;
+    const nodeW = inspectorNode.width ?? NODE_W;
+    const scaledW = nodeW * view.z; // chiều rộng hiển thị của nút = của bảng
+    const PANEL_W = scaledW / s; // chiều rộng CSS (chưa scale) để sau khi scale bằng đúng nút
     const scaledH = PANEL_H * s;
-    const vw = vpSize.w;
     const vh = vpSize.h;
     const nx = inspectorNode.x * view.z + view.x;
     const ny = inspectorNode.y * view.z + view.y;
     const nBottom = (inspectorNode.y + nodeH(inspectorNode)) * view.z + view.y;
-    const below = nBottom + 10 + scaledH <= vh;
-    const top = below ? nBottom + 10 : Math.max(8, ny - 10 - scaledH);
-    const left = Math.max(8, Math.min(nx, vw - scaledW - 8));
-    return { left, top, width: PANEL_W, transform: `scale(${s})`, transformOrigin: 'top left' };
+    const below = nBottom + scaledH <= vh;
+    const top = below ? nBottom : Math.max(0, ny - scaledH);
+    const left = nx;
+    return {
+      style: { left, top, width: PANEL_W, transform: `scale(${s})`, transformOrigin: 'top left' },
+      placement: below ? 'below' : 'above',
+    };
   })() : null;
+  const panelStyle = panelInfo?.style || null;
+  const panelPlacement = panelInfo?.placement || 'below';
 
   // Nền canvas theo chế độ lưới (dots = chấm như cũ, lines = kẻ, blank = trống)
   const gridStyle = gridMode === 'dots'
@@ -1326,7 +1385,14 @@ export default function Canvas() {
                 showResize={selected.length === 1 && selected[0] === n.id}
                 onResizeDown={onResizeDown}
                 z={view.z}
+                editing={editingTextId === n.id}
+                assisting={assistingText}
+                onTextChange={(t) => updateNode(n.id, { text: t })}
+                onTextDone={() => setEditingTextId(null)}
+                onAssist={() => assistNodeText(n)}
                 onDoubleClick={() => {
+                  // Nút văn bản nhập trực tiếp bằng 1 lần bấm, không dùng hộp thoại
+                  if (n.type === 'text') return;
                   const t = window.prompt('Văn bản của nút', n.text || '');
                   if (t != null) setDoc((d) => ({ ...d, nodes: d.nodes.map((x) => x.id === n.id ? { ...x, text: t } : x) }));
                 }}
@@ -1540,13 +1606,15 @@ export default function Canvas() {
           );
         })()}
 
-        {/* Bảng cấu hình nhỏ: nổi ngay bên dưới nút đang chọn */}
-        {inspectorNode && inspectorNode.type !== 'group' && panelStyle && (
+        {/* Bảng cấu hình: xổ xuống liền với nút ảnh/video đang chọn (nút văn bản
+            nhập trực tiếp trong nút nên không mở bảng này) */}
+        {inspectorNode && inspectorNode.type !== 'group' && inspectorNode.type !== 'text' && panelStyle && (
           <NodeInspector
             node={inspectorNode}
             inputs={nodeInputs(inspectorNode.id)}
             busy={busy}
             style={panelStyle}
+            placement={panelPlacement}
             onClose={() => setInspectorId(null)}
             onUpdate={(patch) => updateNode(inspectorNode.id, patch)}
             onGenerate={() => generateNode(inspectorNode)}
@@ -1696,7 +1764,7 @@ function ToolBtn({ icon: Icon, onClick, active, disabled, danger, title }) {
   );
 }
 
-function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef, showResize, onResizeDown, z = 1 }) {
+function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef, showResize, onResizeDown, z = 1, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -1794,9 +1862,51 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
       </div>
 
       {isText ? (
-        <p className="line-clamp-4 min-h-[76px] rounded-xl border border-white/[0.06] bg-[#0d111c]/80 px-3 py-2.5 text-[12px] leading-relaxed text-mist-200">
-          {node.text || 'Văn bản trống, nhấp đúp để sửa'}
-        </p>
+        editing ? (
+          // Nhập trực tiếp trong nút: ô nhập + nút nhờ Muse viết + nút Xong.
+          // Dùng onPointerDown + preventDefault cho 2 nút để bấm không làm
+          // textarea mất focus (mất focus sẽ đóng ô nhập trước khi nút chạy).
+          <div
+            className="rounded-xl border border-brand-400/50 bg-[#0d111c]/80"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <textarea
+              autoFocus
+              value={node.text || ''}
+              onChange={(e) => onTextChange?.(e.target.value)}
+              onBlur={() => onTextDone?.()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') onTextDone?.();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              rows={4}
+              placeholder="Nhập câu lệnh…"
+              className="block min-h-[76px] w-full resize-none rounded-xl bg-transparent px-3 py-2.5 text-[12px] leading-relaxed text-mist-200 outline-none placeholder:text-mist-400/70"
+            />
+            <div className="flex items-center gap-1.5 border-t border-white/[0.06] px-2 py-1.5">
+              <button
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onAssist?.(); }}
+                disabled={assisting || !node.text?.trim()}
+                className="flex h-7 flex-1 items-center justify-center gap-1 rounded-lg text-[11px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+              >
+                {assisting ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
+                {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
+              </button>
+              <button
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onTextDone?.(); }}
+                className="flex h-7 items-center gap-1 rounded-lg bg-brand-400/15 px-2.5 text-[11px] font-medium text-brand-300 transition hover:bg-brand-400/25"
+              >
+                <Check size={11} /> Xong
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="line-clamp-4 min-h-[76px] rounded-xl border border-white/[0.06] bg-[#0d111c]/80 px-3 py-2.5 text-[12px] leading-relaxed text-mist-200">
+            {node.text || 'Nhấn vào để nhập câu lệnh…'}
+          </p>
+        )
       ) : (
         <div data-media className="relative cursor-pointer overflow-hidden rounded-xl bg-black/40" title="Bấm để xem to" style={{ height: mediaH }}>
           {node.mediaUrl ? (
