@@ -9,10 +9,10 @@ const r = Router();
 
 r.post('/register', (req, res) => {
   const { email, password, name, ref } = req.body || {};
-  if (getSetting('allowRegister') === '0') return res.status(403).json({ error: '当前未开放注册' });
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
-  if (!password || String(password).length < 6) return res.status(400).json({ error: '密码至少 6 位' });
-  if (findUserByEmail(email)) return res.status(409).json({ error: '该邮箱已注册' });
+  if (getSetting('allowRegister') === '0') return res.status(403).json({ error: 'Hiện chưa mở đăng ký' });
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Định dạng email không đúng' });
+  if (!password || String(password).length < 6) return res.status(400).json({ error: 'Mật khẩu ít nhất 6 ký tự' });
+  if (findUserByEmail(email)) return res.status(409).json({ error: 'Email này đã được đăng ký' });
 
   // 邀请关系：邀请人 +50，被邀请人额外 +50
   const inviter = ref ? findByInviteCode(ref) : null;
@@ -20,8 +20,8 @@ r.post('/register', (req, res) => {
 
   if (inviter) {
     try {
-      addCredits(inviter.id, 50, `邀请新用户 ${user.email.split('@')[0]}`);
-      addCredits(user.id, 50, '受邀注册奖励');
+      addCredits(inviter.id, 50, `Mời người dùng mới ${user.email.split('@')[0]}`);
+      addCredits(user.id, 50, 'Thưởng đăng ký theo lời mời');
     } catch (e) {
       console.error('[invite] 奖励发放失败', e.message);
     }
@@ -50,9 +50,9 @@ r.post('/login', (req, res) => {
   const { email, password } = req.body || {};
   const user = findUserByEmail(email);
   if (!user || !verifyPassword(String(password || ''), user.password_hash)) {
-    return res.status(401).json({ error: '邮箱或密码错误' });
+    return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng' });
   }
-  if (user.status !== 'active') return res.status(403).json({ error: '账号已被封禁' });
+  if (user.status !== 'active') return res.status(403).json({ error: 'Tài khoản đã bị khóa' });
   res.json({ token: signToken(user), user: publicUser(user) });
 });
 
@@ -65,9 +65,9 @@ r.patch('/me', requireAuth, (req, res) => {
   if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(String(name).slice(0, 40), req.user.id);
   if (password) {
     if (!verifyPassword(String(oldPassword || ''), req.user.password_hash)) {
-      return res.status(400).json({ error: '原密码不正确' });
+      return res.status(400).json({ error: 'Mật khẩu cũ không đúng' });
     }
-    if (String(password).length < 6) return res.status(400).json({ error: '新密码至少 6 位' });
+    if (String(password).length < 6) return res.status(400).json({ error: 'Mật khẩu mới ít nhất 6 ký tự' });
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), req.user.id);
   }
   res.json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });

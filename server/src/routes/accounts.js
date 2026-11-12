@@ -70,7 +70,7 @@ r.post('/bind-code', requireAuth, (req, res) => {
 // 查询绑定状态（绑定页轮询用，公开读）
 r.get('/bind/:code', (req, res) => {
   const row = getBindCode(req.params.code);
-  if (!row) return res.status(404).json({ error: '绑定码不存在' });
+  if (!row) return res.status(404).json({ error: 'Mã liên kết không tồn tại' });
   res.json({
     status: row.status,
     message: row.message || null,
@@ -83,19 +83,19 @@ r.get('/bind/:code', (req, res) => {
 // 扩展 / 油猴脚本提交 cookie（公开，用一次性 code 认证）
 r.post('/bind', async (req, res) => {
   const { code, cookie, label } = req.body || {};
-  if (!code) return res.status(400).json({ error: '缺少绑定码' });
+  if (!code) return res.status(400).json({ error: 'Thiếu mã liên kết' });
   if (!cookie || String(cookie).trim().length < 10) {
-    return res.status(400).json({ error: '没有收到 Cookie，请确认浏览器已登录 muse.ai' });
+    return res.status(400).json({ error: 'Chưa nhận được Cookie, vui lòng kiểm tra trình duyệt đã đăng nhập muse.ai' });
   }
 
   const row = getBindCode(code);
-  if (!row) return res.status(404).json({ error: '绑定码不存在' });
-  if (row.status === 'expired') return res.status(410).json({ error: '绑定码已过期，请在平台重新生成' });
-  if (row.status === 'done') return res.status(409).json({ error: '该绑定码已使用过' });
+  if (!row) return res.status(404).json({ error: 'Mã liên kết không tồn tại' });
+  if (row.status === 'expired') return res.status(410).json({ error: 'Mã liên kết đã hết hạn, vui lòng tạo lại trên nền tảng' });
+  if (row.status === 'done') return res.status(409).json({ error: 'Mã liên kết này đã được sử dụng' });
 
   const cleaned = String(cookie).replace(/^cookie\s*:\s*/i, '').replace(/\s*\n\s*/g, '; ');
   if (!/hatch_sess=/.test(cleaned)) {
-    const msg = 'Cookie 里没有 hatch_sess，这个浏览器可能没登录 muse.ai';
+    const msg = 'Cookie không có hatch_sess, trình duyệt này có thể chưa đăng nhập muse.ai';
     failBindCode(code, msg);
     return res.status(400).json({ error: msg });
   }
@@ -108,12 +108,12 @@ r.post('/bind', async (req, res) => {
     });
   } catch (e) {
     failBindCode(code, e.message);
-    return res.status(502).json({ error: `上游拒绝导入：${e.message}` });
+    return res.status(502).json({ error: `Upstream từ chối nhập：${e.message}` });
   }
 
   const added = (result.added || [])[0];
   if (!added) {
-    const msg = '上游未返回账号信息';
+    const msg = 'Upstream không trả về thông tin tài khoản';
     failBindCode(code, msg);
     return res.status(502).json({ error: msg });
   }
@@ -126,7 +126,7 @@ r.post('/bind', async (req, res) => {
     expiresAt: added.expires_at || null,
   });
 
-  finishBindCode(code, { accountId: acc.id, message: result.warning || '绑定成功' });
+  finishBindCode(code, { accountId: acc.id, message: result.warning || 'Liên kết thành công' });
 
   res.json({
     ok: true,
@@ -228,7 +228,7 @@ r.post('/quota', requireAuth, async (req, res) => {
 r.post('/', requireAuth, async (req, res) => {
   const { cookie, label, proxy } = req.body || {};
   if (!cookie || String(cookie).trim().length < 10) {
-    return res.status(400).json({ error: '请粘贴完整的 Cookie（至少包含 hatch_sess）' });
+    return res.status(400).json({ error: 'Vui lòng dán đầy đủ Cookie (ít nhất phải có hatch_sess)' });
   }
   if (proxy !== undefined && proxy !== null && (typeof proxy !== 'object' || typeof proxy.server !== 'string' || !proxy.server.trim())) {
     return res.status(400).json({ error: 'Proxy phải có địa chỉ máy chủ, ví dụ http://host:port' });
@@ -245,11 +245,11 @@ r.post('/', requireAuth, async (req, res) => {
       ...(proxy ? { proxy } : {}),
     });
   } catch (e) {
-    return res.status(502).json({ error: `上游拒绝导入：${e.message}` });
+    return res.status(502).json({ error: `Upstream từ chối nhập：${e.message}` });
   }
 
   const added = (result.added || [])[0];
-  if (!added) return res.status(502).json({ error: '上游未返回账号信息' });
+  if (!added) return res.status(502).json({ error: 'Upstream không trả về thông tin tài khoản' });
 
   const row = upsertAccount({
     upstreamId: added.id,
@@ -270,9 +270,9 @@ r.post('/', requireAuth, async (req, res) => {
  * proxy = { server, username?, password? } để đặt; proxy = null để xóa. */
 r.patch('/:id/proxy', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: '账号不存在' });
+  if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
   if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权操作该账号' });
+    return res.status(403).json({ error: 'Không có quyền thao tác tài khoản này' });
   }
   const { proxy } = req.body || {};
   if (proxy !== null && (typeof proxy !== 'object' || typeof proxy.server !== 'string' || !proxy.server.trim())) {
@@ -289,9 +289,9 @@ r.patch('/:id/proxy', requireAuth, async (req, res) => {
 
 r.post('/:id/test', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: '账号不存在' });
+  if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
   if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权操作该账号' });
+    return res.status(403).json({ error: 'Không có quyền thao tác tài khoản này' });
   }
   try {
     const out = await muse.testAccount(row.upstream_id);
@@ -312,9 +312,9 @@ r.post('/:id/test', requireAuth, async (req, res) => {
 
 r.post('/:id/keepalive', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: '账号不存在' });
+  if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
   if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权操作该账号' });
+    return res.status(403).json({ error: 'Không có quyền thao tác tài khoản này' });
   }
   try {
     res.json({ result: await muse.keepaliveAccount(row.upstream_id) });
@@ -325,9 +325,9 @@ r.post('/:id/keepalive', requireAuth, async (req, res) => {
 
 r.delete('/:id', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: '账号不存在' });
+  if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
   if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权删除该账号' });
+    return res.status(403).json({ error: 'Không có quyền xóa tài khoản này' });
   }
   if (row.upstream_id) {
     try { await muse.deleteAccount(row.upstream_id); } catch (e) { /* 上游已不存在也照删 */ }

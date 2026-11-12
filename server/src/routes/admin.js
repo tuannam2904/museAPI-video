@@ -47,11 +47,11 @@ r.post('/users', (req, res) => {
 
 r.patch('/users/:id', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
-  if (!user) return res.status(404).json({ error: '用户不存在' });
+  if (!user) return res.status(404).json({ error: 'Người dùng không tồn tại' });
   const { credits, role, status, password } = req.body || {};
   if (credits !== undefined && credits !== null) {
     const delta = Number(credits);
-    if (delta !== 0) addCredits(user.id, delta, delta > 0 ? '管理员充值' : '管理员扣减');
+    if (delta !== 0) addCredits(user.id, delta, delta > 0 ? 'Quản trị viên nạp điểm' : 'Quản trị viên trừ điểm');
   }
   if (role && ['user', 'admin'].includes(role)) {
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, user.id);

@@ -49,18 +49,18 @@ r.get('/team', requireAuth, (req, res) => {
 r.post('/team/transfer', requireAuth, (req, res) => {
   const { email, credits } = req.body || {};
   const amount = Math.floor(Number(credits));
-  if (!email) return res.status(400).json({ error: '请填写对方邮箱' });
-  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: '请输入有效的积分数' });
+  if (!email) return res.status(400).json({ error: 'Vui lòng nhập email của đối phương' });
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Vui lòng nhập số điểm hợp lệ' });
 
   const target = db.prepare('SELECT * FROM users WHERE email = ?').get(String(email).toLowerCase().trim());
-  if (!target) return res.status(404).json({ error: '对方还没有注册' });
-  if (target.id === req.user.id) return res.status(400).json({ error: '不能转给自己' });
+  if (!target) return res.status(404).json({ error: 'Đối phương chưa đăng ký' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'Không thể chuyển cho chính mình' });
 
   const me = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
-  if (me.credits < amount) return res.status(402).json({ error: `积分不足，当前 ${me.credits}` });
+  if (me.credits < amount) return res.status(402).json({ error: `Không đủ điểm, hiện có ${me.credits}` });
 
-  addCredits(req.user.id, -amount, `转赠给 ${target.email.split('@')[0]}`, null);
-  addCredits(target.id, amount, `来自 ${req.user.email.split('@')[0]} 的转赠`, null);
+  addCredits(req.user.id, -amount, `Tặng cho ${target.email.split('@')[0]}`, null);
+  addCredits(target.id, amount, `Được tặng từ ${req.user.email.split('@')[0]}`, null);
 
   res.json({
     ok: true,
@@ -72,11 +72,11 @@ r.post('/team/transfer', requireAuth, (req, res) => {
 r.post('/team/join', requireAuth, (req, res) => {
   const code = String(req.body?.code || '').trim();
   const inviter = findByInviteCode(code);
-  if (!inviter) return res.status(404).json({ error: '邀请码无效' });
-  if (inviter.id === req.user.id) return res.status(400).json({ error: '不能加入自己的团队' });
+  if (!inviter) return res.status(404).json({ error: 'Mã mời không hợp lệ' });
+  if (inviter.id === req.user.id) return res.status(400).json({ error: 'Không thể tham gia nhóm của chính mình' });
 
   const existing = db.prepare('SELECT invited_by FROM users WHERE id = ?').get(req.user.id);
-  if (existing?.invited_by) return res.status(409).json({ error: '你已经有上级了' });
+  if (existing?.invited_by) return res.status(409).json({ error: 'Bạn đã có người giới thiệu' });
 
   db.prepare('UPDATE users SET invited_by = ? WHERE id = ?').run(inviter.id, req.user.id);
   res.json({ ok: true, inviter: inviter.name || inviter.email.split('@')[0] });

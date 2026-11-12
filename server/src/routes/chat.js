@@ -5,14 +5,14 @@ import { CFG } from '../config.js';
 const r = Router();
 
 export const TEXT_MODELS = [
-  { id: 'muse-spark', name: 'Muse Spark', desc: '内置文本模型，响应快' },
+  { id: 'muse-spark', name: 'Muse Spark', desc: 'Mô hình văn bản tích hợp, phản hồi nhanh' },
 ];
 
 /** 站内文本对话：用 JWT 鉴权，转发到上游的 OpenAI 兼容接口 */
 r.post('/chat', requireAuth, async (req, res) => {
   const { messages, model = 'muse-spark' } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: '请先选择文本模型' });
+    return res.status(400).json({ error: 'Vui lòng chọn mô hình văn bản trước' });
   }
 
   const clean = messages
@@ -39,13 +39,13 @@ r.post('/chat', requireAuth, async (req, res) => {
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
     if (!up.ok) {
-      return res.status(up.status).json({ error: data?.error?.message || data?.detail || `上游 HTTP ${up.status}` });
+      return res.status(up.status).json({ error: data?.error?.message || data?.detail || `Lỗi HTTP ${up.status} từ upstream` });
     }
 
     const content = data?.choices?.[0]?.message?.content ?? '';
     res.json({ content, model, usage: data?.usage || null });
   } catch (e) {
-    res.status(502).json({ error: `请求异常：${e.message}` });
+    res.status(502).json({ error: `Yêu cầu gặp lỗi：${e.message}` });
   } finally {
     clearTimeout(timer);
   }

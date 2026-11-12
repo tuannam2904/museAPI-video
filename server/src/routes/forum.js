@@ -5,12 +5,12 @@ import { db, uid, now } from '../db.js';
 const r = Router();
 
 export const CATEGORIES = [
-  { key: 'all', label: '全部' },
-  { key: 'chat', label: '开麦吐槽' },
-  { key: 'premiere', label: 'AI 大片首映' },
-  { key: 'fail', label: 'AI 翻车现场' },
-  { key: 'help', label: '交流互助' },
-  { key: 'notice', label: '官方公告' },
+  { key: 'all', label: 'Tất cả' },
+  { key: 'chat', label: 'Tán gẫu' },
+  { key: 'premiere', label: 'Ra mắt phim AI' },
+  { key: 'fail', label: 'AI lỗi hài' },
+  { key: 'help', label: 'Trao đổi giúp đỡ' },
+  { key: 'notice', label: 'Thông báo chính thức' },
 ];
 
 const shape = (p, userId) => ({
@@ -20,7 +20,7 @@ const shape = (p, userId) => ({
   content: p.content,
   likes: p.likes,
   createdAt: p.created_at,
-  author: { name: p.author_name || p.author_email?.split('@')[0] || '匿名', id: p.user_id },
+  author: { name: p.author_name || p.author_email?.split('@')[0] || 'Ẩn danh', id: p.user_id },
   liked: !!p.liked,
   replyCount: p.reply_count || 0,
 });
@@ -48,8 +48,8 @@ r.get('/posts', requireAuth, (req, res) => {
 
 r.post('/posts', requireAuth, (req, res) => {
   const { title, content, category } = req.body || {};
-  if (!title?.trim()) return res.status(400).json({ error: '请填写标题' });
-  if (!CATEGORIES.some((c) => c.key === category)) return res.status(400).json({ error: '分类不存在' });
+  if (!title?.trim()) return res.status(400).json({ error: 'Vui lòng nhập tiêu đề' });
+  if (!CATEGORIES.some((c) => c.key === category)) return res.status(400).json({ error: 'Chuyên mục không tồn tại' });
   const id = uid('post_');
   db.prepare('INSERT INTO posts(id, user_id, category, title, content, created_at) VALUES(?,?,?,?,?,?)')
     .run(id, req.user.id, category, title.trim().slice(0, 120), (content || '').slice(0, 4000), now());
@@ -58,7 +58,7 @@ r.post('/posts', requireAuth, (req, res) => {
 
 r.post('/posts/:id/like', requireAuth, (req, res) => {
   const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(req.params.id);
-  if (!post) return res.status(404).json({ error: '帖子不存在' });
+  if (!post) return res.status(404).json({ error: 'Bài viết không tồn tại' });
 
   const liked = db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?')
     .get(post.id, req.user.id);
@@ -86,16 +86,16 @@ r.get('/posts/:id/replies', requireAuth, (req, res) => {
       id: x.id,
       content: x.content,
       createdAt: x.created_at,
-      author: { name: x.author_name || x.author_email?.split('@')[0] || '匿名' },
+      author: { name: x.author_name || x.author_email?.split('@')[0] || 'Ẩn danh' },
     })),
   });
 });
 
 r.post('/posts/:id/replies', requireAuth, (req, res) => {
   const content = String(req.body?.content || '').trim();
-  if (!content) return res.status(400).json({ error: '请输入回复内容' });
+  if (!content) return res.status(400).json({ error: 'Vui lòng nhập nội dung trả lời' });
   const post = db.prepare('SELECT id FROM posts WHERE id = ?').get(req.params.id);
-  if (!post) return res.status(404).json({ error: '帖子不存在' });
+  if (!post) return res.status(404).json({ error: 'Bài viết không tồn tại' });
   db.prepare('INSERT INTO replies(id, post_id, user_id, content, created_at) VALUES(?,?,?,?,?)')
     .run(uid('rep_'), post.id, req.user.id, content.slice(0, 2000), now());
   res.json({ ok: true });
@@ -103,9 +103,9 @@ r.post('/posts/:id/replies', requireAuth, (req, res) => {
 
 r.delete('/posts/:id', requireAuth, (req, res) => {
   const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
-  if (!post) return res.status(404).json({ error: '帖子不存在' });
+  if (!post) return res.status(404).json({ error: 'Bài viết không tồn tại' });
   if (post.user_id !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权删除' });
+    return res.status(403).json({ error: 'Không có quyền xóa' });
   }
   db.prepare('DELETE FROM posts WHERE id = ?').run(post.id);
   db.prepare('DELETE FROM replies WHERE post_id = ?').run(post.id);

@@ -27,7 +27,7 @@ const upload = multer({
   limits: { fileSize: 40 * 1024 * 1024, files: 10 },
   fileFilter: (_req, file, cb) => {
     const ok = /^(image|video|audio)\//.test(file.mimetype) || file.mimetype === 'application/pdf';
-    cb(ok ? null : new Error('仅支持图片 / 视频 / 音频 / PDF 参考素材'), ok);
+    cb(ok ? null : new Error('Chỉ hỗ trợ ảnh / video / âm thanh / PDF làm tài liệu tham chiếu'), ok);
   },
 });
 
@@ -77,7 +77,7 @@ r.post('/upload', requireAuth, upload.array('files', 10), (req, res) => {
       .run(uid('u_'), req.user.id, f.filename, f.mimetype, f.size, now());
     return { url: `/uploads/${f.filename}`, name: f.originalname, bytes: f.size, mime: f.mimetype };
   });
-  if (!files.length) return res.status(400).json({ error: '没有收到文件' });
+  if (!files.length) return res.status(400).json({ error: 'Không nhận được file' });
   res.json({ files });
 });
 
@@ -85,7 +85,7 @@ r.post('/upload', requireAuth, upload.array('files', 10), (req, res) => {
 r.post('/videos', requireAuth, async (req, res) => {
   const { prompt, duration = 5, size = '16:9', images = [], model = 'muse-video', extra = null } = req.body || {};
   if (!prompt || String(prompt).trim().length < 2) {
-    return res.status(400).json({ error: '请填写画面描述' });
+    return res.status(400).json({ error: 'Vui lòng nhập mô tả hình ảnh' });
   }
   const dur = CFG.videoDurations.includes(Number(duration)) ? Number(duration) : 5;
   const params = { duration: dur, size: CFG.sizes.includes(size) ? size : '16:9', images, extra };
@@ -93,11 +93,11 @@ r.post('/videos', requireAuth, async (req, res) => {
 
   const fresh = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
   if (fresh.credits < cost) {
-    return res.status(402).json({ error: `积分不足，本次需要 ${cost}，当前 ${fresh.credits}` });
+    return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
   }
 
   const job = createJob(req.user.id, 'video', String(prompt).trim(), params, cost);
-  addCredits(req.user.id, -cost, '创建视频任务', job.id);
+  addCredits(req.user.id, -cost, 'Tạo tác vụ video', job.id);
 
   try {
     const refs = normalizeRefs(images);
@@ -112,14 +112,14 @@ r.post('/videos', requireAuth, async (req, res) => {
 
     const out = await muse.createVideo(payload);
     const upstreamId = out?.id || out?.task_id;
-    if (!upstreamId) throw new Error('上游未返回任务 ID');
+    if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
     updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 15 });
     res.json({ job: getJob(job.id) });
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    addCredits(req.user.id, cost, '任务创建失败退还', job.id);
+    addCredits(req.user.id, cost, 'Hoàn điểm khi tạo tác vụ thất bại', job.id);
     updateJob(job.id, { refunded: 1 });
-    res.status(502).json({ error: `创建任务失败：${e.message}`, refunded: true });
+    res.status(502).json({ error: `Tạo tác vụ thất bại：${e.message}`, refunded: true });
   }
 });
 
@@ -127,18 +127,18 @@ r.post('/videos', requireAuth, async (req, res) => {
 r.post('/images', requireAuth, async (req, res) => {
   const { prompt, size = '1:1', images = [] } = req.body || {};
   if (!prompt || String(prompt).trim().length < 2) {
-    return res.status(400).json({ error: '请填写提示词' });
+    return res.status(400).json({ error: 'Vui lòng nhập prompt' });
   }
   const params = { size: CFG.sizes.includes(size) ? size : '1:1', images };
   const cost = priceOf('image', params);
 
   const fresh = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
   if (fresh.credits < cost) {
-    return res.status(402).json({ error: `积分不足，本次需要 ${cost}，当前 ${fresh.credits}` });
+    return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
   }
 
   const job = createJob(req.user.id, 'image', String(prompt).trim(), params, cost);
-  addCredits(req.user.id, -cost, '创建图片任务', job.id);
+  addCredits(req.user.id, -cost, 'Tạo tác vụ hình ảnh', job.id);
 
   try {
     const refs = normalizeRefs(images);
@@ -147,14 +147,14 @@ r.post('/images', requireAuth, async (req, res) => {
 
     const out = await muse.createImageTask(payload);
     const upstreamId = out?.id || out?.task_id;
-    if (!upstreamId) throw new Error('上游未返回任务 ID');
+    if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
     updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 10 });
     res.json({ job: getJob(job.id) });
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    addCredits(req.user.id, cost, '任务创建失败退还', job.id);
+    addCredits(req.user.id, cost, 'Hoàn điểm khi tạo tác vụ thất bại', job.id);
     updateJob(job.id, { refunded: 1 });
-    res.status(502).json({ error: `创建任务失败：${e.message}`, refunded: true });
+    res.status(502).json({ error: `Tạo tác vụ thất bại：${e.message}`, refunded: true });
   }
 });
 
@@ -180,18 +180,18 @@ r.get('/media-stats', requireAuth, (req, res) => {
 
 r.get('/jobs/:id', requireAuth, (req, res) => {
   const job = getJob(req.params.id);
-  if (!job) return res.status(404).json({ error: '任务不存在' });
+  if (!job) return res.status(404).json({ error: 'Tác vụ không tồn tại' });
   if (job.userId !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权查看' });
+    return res.status(403).json({ error: 'Không có quyền xem' });
   }
   res.json({ job });
 });
 
 r.delete('/jobs/:id', requireAuth, (req, res) => {
   const job = getJob(req.params.id);
-  if (!job) return res.status(404).json({ error: '任务不存在' });
+  if (!job) return res.status(404).json({ error: 'Tác vụ không tồn tại' });
   if (job.userId !== req.user.id && req.user.role !== 'admin') {
-    return res.status(403).json({ error: '无权删除' });
+    return res.status(403).json({ error: 'Không có quyền xóa' });
   }
   if (job.mediaFile) {
     try { fs.unlinkSync(path.join(CFG.dataDir, 'media', job.mediaFile)); } catch { /* ignore */ }

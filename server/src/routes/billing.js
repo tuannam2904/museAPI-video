@@ -7,20 +7,20 @@ const r = Router();
 /* 会员档位（对应目标站：初级/中级/高级/旗舰） */
 export const PLANS = {
   starter: {
-    key: 'starter', name: '初级版', price: 19.9, credits: 144,
-    perks: ['标准画质', '基础模型', '普通队列'],
+    key: 'starter', name: 'Bản Cơ bản', price: 19.9, credits: 144,
+    perks: ['Chất lượng chuẩn', 'Mô hình cơ bản', 'Hàng đợi thường'],
   },
   standard: {
-    key: 'standard', name: '中级版', price: 29.9, credits: 224,
-    perks: ['高清画质', '全部模型', '优先队列'],
+    key: 'standard', name: 'Bản Nâng cao', price: 29.9, credits: 224,
+    perks: ['Chất lượng HD', 'Tất cả mô hình', 'Hàng đợi ưu tiên'],
   },
   pro: {
-    key: 'pro', name: '高级版', price: 39.9, credits: 304,
-    perks: ['高清画质', '全部模型', '去水印', '优先队列', '商用授权'],
+    key: 'pro', name: 'Bản Chuyên nghiệp', price: 39.9, credits: 304,
+    perks: ['Chất lượng HD', 'Tất cả mô hình', 'Xóa watermark', 'Hàng đợi ưu tiên', 'Giấy phép thương mại'],
   },
   ultimate: {
-    key: 'ultimate', name: '旗舰版', price: 49.9, credits: 384,
-    perks: ['最高画质', '全部模型', '去水印', '最优先队列', '商用授权', '专属客服'],
+    key: 'ultimate', name: 'Bản Cao cấp', price: 49.9, credits: 384,
+    perks: ['Chất lượng cao nhất', 'Tất cả mô hình', 'Xóa watermark', 'Hàng đợi ưu tiên cao nhất', 'Giấy phép thương mại', 'Hỗ trợ riêng'],
   },
 };
 
@@ -40,15 +40,15 @@ r.get('/membership', requireAuth, (req, res) => {
 r.post('/membership', requireAuth, (req, res) => {
   const { plan } = req.body || {};
   const p = PLANS[plan];
-  if (!p) return res.status(400).json({ error: '档位不存在' });
+  if (!p) return res.status(400).json({ error: 'Gói không tồn tại' });
 
   const current = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
   if (current.credits < p.credits) {
-    return res.status(402).json({ error: `积分不足，订阅${p.name}需要 ${p.credits} 积分` });
+    return res.status(402).json({ error: `Không đủ điểm, đăng ký ${p.name} cần ${p.credits} điểm` });
   }
 
   const ts = now();
-  addCredits(req.user.id, -p.credits, `订阅${p.name}`, null);
+  addCredits(req.user.id, -p.credits, `Đăng ký ${p.name}`, null);
   db.prepare(
     `INSERT INTO memberships(user_id, plan, credits, started_at, expires_at) VALUES(?,?,?,?,?)
      ON CONFLICT(user_id) DO UPDATE SET plan = excluded.plan, credits = excluded.credits,
@@ -74,9 +74,9 @@ r.get('/recharge/orders', requireAuth, (req, res) => {
 r.post('/recharge', requireAuth, (req, res) => {
   const amount = Number(req.body?.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(400).json({ error: '请输入有效的充值金额' });
+    return res.status(400).json({ error: 'Vui lòng nhập số tiền nạp hợp lệ' });
   }
-  if (amount > 100000) return res.status(400).json({ error: '单笔充值金额过大' });
+  if (amount > 100000) return res.status(400).json({ error: 'Số tiền nạp một lần quá lớn' });
 
   const credits = Math.round(amount * CREDIT_PER_YUAN);
   const id = uid('ord_');
@@ -88,7 +88,7 @@ r.post('/recharge', requireAuth, (req, res) => {
 
   // 自托管环境没有真实支付通道：直接按「模拟支付成功」入账
   db.prepare("UPDATE orders SET status = 'paid', paid_at = ? WHERE id = ?").run(ts, id);
-  addCredits(req.user.id, credits, `账户充值 ¥${amount}`, null);
+  addCredits(req.user.id, credits, `Nạp tiền vào tài khoản ¥${amount}`, null);
 
   res.json({
     ok: true,

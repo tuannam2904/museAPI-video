@@ -41,7 +41,7 @@ r.get('/queue', requireAuth, (req, res) => {
 
 r.post('/queue', requireAuth, (req, res) => {
   const { prompt, duration = 5, size = '16:9', intervalMin = 5, maxRuns = 3, images = [] } = req.body || {};
-  if (!prompt?.trim()) return res.status(400).json({ error: '请先输入提示词并选择模型' });
+  if (!prompt?.trim()) return res.status(400).json({ error: 'Vui lòng nhập prompt và chọn mô hình trước' });
 
   const interval = Math.max(1, Math.min(1440, Number(intervalMin) || 5));
   const runs = Math.max(1, Math.min(50, Number(maxRuns) || 3));
@@ -62,17 +62,17 @@ r.post('/queue', requireAuth, (req, res) => {
 
 r.patch('/queue/:id', requireAuth, (req, res) => {
   const row = db.prepare('SELECT * FROM queue_items WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-  if (!row) return res.status(404).json({ error: '任务不存在' });
+  if (!row) return res.status(404).json({ error: 'Tác vụ không tồn tại' });
 
   const { status, intervalMin, maxRuns } = req.body || {};
 
   if (status === 'paused') {
-    db.prepare("UPDATE queue_items SET status = 'paused', note = ? WHERE id = ?").run('任务已暂停', row.id);
+    db.prepare("UPDATE queue_items SET status = 'paused', note = ? WHERE id = ?").run('Tác vụ đã tạm dừng', row.id);
   } else if (status === 'pending') {
     // 恢复：立即到期，或维持原计划
     const next = row.next_run_at && row.next_run_at > now() ? row.next_run_at : now();
     db.prepare("UPDATE queue_items SET status = 'pending', next_run_at = ?, note = ? WHERE id = ?")
-      .run(next, '任务已恢复', row.id);
+      .run(next, 'Tác vụ đã tiếp tục', row.id);
   }
 
   if (intervalMin != null) {
@@ -91,7 +91,7 @@ r.patch('/queue/:id', requireAuth, (req, res) => {
 r.post('/queue/:id/move', requireAuth, (req, res) => {
   const dir = req.body?.dir === 'up' ? -1 : 1;
   const row = db.prepare('SELECT * FROM queue_items WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-  if (!row) return res.status(404).json({ error: '任务不存在' });
+  if (!row) return res.status(404).json({ error: 'Tác vụ không tồn tại' });
 
   const neighbor = db.prepare(
     dir < 0
@@ -122,7 +122,7 @@ r.delete('/queue', requireAuth, (req, res) => {
 
 r.delete('/queue/:id', requireAuth, (req, res) => {
   const n = db.prepare('DELETE FROM queue_items WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id).changes;
-  if (!n) return res.status(404).json({ error: '任务不存在' });
+  if (!n) return res.status(404).json({ error: 'Tác vụ không tồn tại' });
   res.json({ ok: true });
 });
 

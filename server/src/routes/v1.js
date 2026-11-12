@@ -48,7 +48,7 @@ r.all('/*', async (req, res) => {
   } catch (e) {
     if (!res.headersSent) {
       res.status(502).json({
-        error: { message: `上游不可用：${e.message}`, type: 'upstream_error' },
+        error: { message: `Upstream không khả dụng：${e.message}`, type: 'upstream_error' },
       });
     }
   } finally {

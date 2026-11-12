@@ -117,7 +117,7 @@ async function chatText(system, user, timeoutMs = 600_000) {
       signal: controller.signal,
     });
     const data = await up.json().catch(() => ({}));
-    if (!up.ok) throw new Error(data?.error?.message || data?.detail || `上游 HTTP ${up.status}`);
+    if (!up.ok) throw new Error(data?.error?.message || data?.detail || `Lỗi HTTP ${up.status} từ upstream`);
     return data?.choices?.[0]?.message?.content ?? '';
   } finally {
     clearTimeout(timer);
@@ -256,20 +256,20 @@ async function createSceneImage(userId, scene, aspect) {
   const params = { size: ASPECTS.includes(aspect) ? aspect : '9:16' };
   const cost = priceOf('image', params);
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
-  if (!user || user.credits < cost) throw new Error(`积分不足（tạo ảnh cần ${cost}）`);
+  if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo ảnh cần ${cost})`);
   const job = createJob(userId, 'image', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo ảnh cảnh', job.id);
   try {
     const out = await muse.createImageTask({ prompt, model: 'muse-image', size: params.size });
     const upstreamId = out?.id || out?.task_id;
-    if (!upstreamId) throw new Error('上游未返回任务 ID');
+    if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
     updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 10 });
     db.prepare("UPDATE film_scenes SET image_job_id = ?, status = 'image', error = NULL, updated_at = ? WHERE id = ?")
       .run(job.id, now(), scene.id);
     return job;
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    addCredits(userId, cost, 'Film: tạo ảnh thất bại退还', job.id);
+    addCredits(userId, cost, 'Film: hoàn điểm khi tạo ảnh thất bại', job.id);
     updateJob(job.id, { refunded: 1 });
     throw e;
   }
@@ -285,7 +285,7 @@ async function createSceneVideo(userId, project, scene) {
   };
   const cost = priceOf('video', params);
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
-  if (!user || user.credits < cost) throw new Error(`积分不足（tạo video cần ${cost}）`);
+  if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo video cần ${cost})`);
   const job = createJob(userId, 'video', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo video cảnh', job.id);
   try {
@@ -294,14 +294,14 @@ async function createSceneVideo(userId, project, scene) {
     if (refs.length) payload.images = refs;
     const out = await muse.createVideo(payload);
     const upstreamId = out?.id || out?.task_id;
-    if (!upstreamId) throw new Error('上游未返回任务 ID');
+    if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
     updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 15 });
     db.prepare("UPDATE film_scenes SET video_job_id = ?, status = 'video', error = NULL, updated_at = ? WHERE id = ?")
       .run(job.id, now(), scene.id);
     return job;
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    addCredits(userId, cost, 'Film: tạo video thất bại退还', job.id);
+    addCredits(userId, cost, 'Film: hoàn điểm khi tạo video thất bại', job.id);
     updateJob(job.id, { refunded: 1 });
     throw e;
   }
