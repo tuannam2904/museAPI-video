@@ -3,7 +3,6 @@ import { useAuth } from './store/auth.jsx';
 import { ToastProvider, Spinner } from './components/ui.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
-import Create from './pages/Create.jsx';
 import Canvas from './pages/Canvas.jsx';
 import BatchVideo from './pages/BatchVideo.jsx';
 import Characters from './pages/Characters.jsx';
@@ -29,7 +28,7 @@ function AdminGuard({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Boot />;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin') return <Navigate to="/create" replace />;
+  if (user.role !== 'admin') return <Navigate to="/canvas" replace />;
   return children;
 }
 
@@ -46,7 +45,7 @@ export default function App() {
       <Routes>
         <Route
           path="/login"
-          element={loading ? <Boot /> : user ? <Navigate to="/create" replace /> : <Login />}
+          element={loading ? <Boot /> : user ? <Navigate to="/canvas" replace /> : <Login />}
         />
         <Route
           path="/bind/:code"
@@ -64,7 +63,6 @@ export default function App() {
             </Guard>
           }
         >
-          <Route path="/create" element={<Create />} />
           <Route path="/canvas" element={<Canvas />} />
           <Route path="/batch-video" element={<BatchVideo />} />
           <Route path="/characters" element={<Characters />} />
@@ -74,7 +72,7 @@ export default function App() {
           <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
 
-        <Route path="*" element={<Navigate to={user ? '/create' : '/login'} replace />} />
+        <Route path="*" element={<Navigate to={user ? '/canvas' : '/login'} replace />} />
       </Routes>
     </ToastProvider>
   );
