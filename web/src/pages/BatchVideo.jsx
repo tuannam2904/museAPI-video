@@ -21,6 +21,7 @@ import PromptLibrary from '../components/PromptLibrary.jsx';
      giữ hàng đợi; task đang chạy có jobId thì tiếp tục poll để hồi trạng thái. */
 
 const STORE_KEY = 'xm_batch_video';
+const CHAR_STORE_KEY = 'xm_characters';
 const VIDEO_SIZES = ['9:16', '16:9', '1:1'];
 const DURATIONS = [5, 8, 10];
 const STATUS_LABEL = { pending: 'Chờ', running: 'Đang tạo', done: 'Hoàn tất', failed: 'Thất bại' };
@@ -36,6 +37,13 @@ const parseLines = (text) => text.split('\n').map((l) => l.trim()).filter(Boolea
 const loadTasks = () => {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY));
+    return Array.isArray(raw) ? raw : [];
+  } catch { return []; }
+};
+
+const loadCharacters = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CHAR_STORE_KEY));
     return Array.isArray(raw) ? raw : [];
   } catch { return []; }
 };
@@ -62,7 +70,18 @@ export default function BatchVideo() {
   const [summary, setSummary] = useState(null);
   const [retentionDays, setRetentionDays] = useState(7);
 
+  /* ---------- nhân vật (lưu localStorage 'xm_characters') ---------- */
+  const [characters, setCharacters] = useState(loadCharacters);
+  const [keepChar, setKeepChar] = useState(false);
+  const [keepCharId, setKeepCharId] = useState(null);
+  const [showCharForm, setShowCharForm] = useState(false);
+  const [charName, setCharName] = useState('');
+  const [charNote, setCharNote] = useState('');
+  const [charPhotos, setCharPhotos] = useState([]);
+  const [charUploading, setCharUploading] = useState(false);
+
   const fileRef = useRef(null);
+  const charFileRef = useRef(null);
   const tasksRef = useRef(tasks);
   const stopRef = useRef(false);
   const loopRef = useRef(false);
@@ -83,6 +102,7 @@ export default function BatchVideo() {
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { concurrencyRef.current = concurrency; }, [concurrency]);
   useEffect(() => { localStorage.setItem(STORE_KEY, JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { localStorage.setItem(CHAR_STORE_KEY, JSON.stringify(characters)); }, [characters]);
   useEffect(() => () => { mountedRef.current = false; stopRef.current = true; }, []);
 
   /* ---------- tài khoản + chính sách lưu trữ ---------- */
@@ -218,25 +238,30 @@ export default function BatchVideo() {
       const base = tasksRef.current.length
         ? Math.max(...tasksRef.current.map((t) => t.index)) + 1
         : 1;
-      const newTasks = prompts.map((prompt, i) => ({
-        id: `b_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
-        index: base + i,
-        prompt,
-        status: 'pending',
-        jobId: null,
-        progress: 0,
-        mediaUrl: null,
-        error: null,
-        cost: perVideo,
-        duration,
-        size,
-        refUrls: refMode === 'shared'
+      const newTasks = prompts.map((prompt, i) => {
+        const charUrls = charUrlsForPrompt(prompt);
+        const baseRefs = refMode === 'shared'
           ? refs.map((r) => r.url)
-          : (refs[i] ? [refs[i].url] : []),
-        createdAt: Date.now() + i,
-        startedAt: null,
-        finishedAt: null,
-      }));
+          : (refs[i] ? [refs[i].url] : []);
+        return {
+          id: `b_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
+          index: base + i,
+          prompt,
+          status: 'pending',
+          jobId: null,
+          progress: 0,
+          mediaUrl: null,
+          error: null,
+          cost: perVideo,
+          duration,
+          size,
+          /* ảnh nhân vật trước, rồi tới ảnh tham chiếu đã tải, tối đa 3 ảnh */
+          refUrls: [...charUrls, ...baseRefs.filter((u) => !charUrls.includes(u))].slice(0, 3),
+          createdAt: Date.now() + i,
+          startedAt: null,
+          finishedAt: null,
+        };
+      });
       setTasksAll([...tasksRef.current, ...newTasks]);
       setSelectedId(newTasks[0].id);
       setLines('');
@@ -294,6 +319,65 @@ export default function BatchVideo() {
     }
   };
 
+  /* ---------- nhân vật: ảnh gắn theo tên trong prompt + nhân vật giữ nguyên ---------- */
+  const charUrlsForPrompt = (prompt) => {
+    const urls = [];
+    if (keepChar && keepCharId) {
+      const kc = characters.find((c) => c.id === keepCharId);
+      if (kc) kc.photos.forEach((p) => { if (!urls.includes(p.url)) urls.push(p.url); });
+    }
+    const lower = (prompt || '').toLowerCase();
+    characters.forEach((c) => {
+      if (c.name && lower.includes(c.name.toLowerCase())) {
+        c.photos.forEach((p) => { if (!urls.includes(p.url)) urls.push(p.url); });
+      }
+    });
+    return urls;
+  };
+
+  const onPickCharPhotos = async (files) => {
+    if (!files?.length) return;
+    if (charPhotos.length + files.length > 3) return toast('Tối đa 3 ảnh mặt cho một nhân vật', 'error');
+    setCharUploading(true);
+    try {
+      const out = await api.upload(Array.from(files));
+      setCharPhotos((r) => [...r, ...out.files].slice(0, 3));
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setCharUploading(false);
+      if (charFileRef.current) charFileRef.current.value = '';
+    }
+  };
+
+  const saveCharacter = () => {
+    const name = charName.trim();
+    if (!name || !charPhotos.length) return;
+    const c = {
+      id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      note: charNote.trim(),
+      photos: charPhotos,
+      createdAt: Date.now(),
+    };
+    setCharacters((list) => [...list, c]);
+    setCharName('');
+    setCharNote('');
+    setCharPhotos([]);
+    setShowCharForm(false);
+    toast('Đã lưu nhân vật', 'ok');
+  };
+
+  const deleteCharacter = (c) => {
+    if (!confirm(`Xóa nhân vật "${c.name}"?`)) return;
+    setCharacters((list) => list.filter((x) => x.id !== c.id));
+    if (keepCharId === c.id) {
+      setKeepCharId(null);
+      setKeepChar(false);
+    }
+    toast('Đã xóa nhân vật', 'ok');
+  };
+
   const usePrompt = (p) => {
     const text = (p.text || '').replace(/\s*\n\s*/g, ' ').trim();
     if (!text) return;
@@ -315,6 +399,13 @@ export default function BatchVideo() {
     });
     return [...list].sort((a, b) => (sortNewest ? b.createdAt - a.createdAt : a.createdAt - b.createdAt));
   }, [tasks, query, statusFilter, sortNewest]);
+
+  /* nhân vật có tên xuất hiện trong các dòng prompt đang nhập */
+  const matchedCharacters = useMemo(() => {
+    const text = lines.toLowerCase();
+    if (!text.trim()) return [];
+    return characters.filter((c) => c.name && text.includes(c.name.toLowerCase()));
+  }, [lines, characters]);
 
   const selected = tasks.find((t) => t.id === selectedId)
     || [...tasks].sort((a, b) => b.createdAt - a.createdAt)[0]
@@ -410,6 +501,11 @@ export default function BatchVideo() {
                 <p className="mt-1.5 text-right font-mono text-[11px] text-mist-400">
                   {lineCount} video · {lines.length} ký tự
                 </p>
+                {matchedCharacters.length > 0 && (
+                  <p className="mt-1 text-[11.5px] text-mist-400">
+                    Nhân vật được nhận ra: <span className="text-brand-300">{matchedCharacters.map((c) => c.name).join(', ')}</span>
+                  </p>
+                )}
               </div>
 
               {/* Ảnh tham chiếu */}
@@ -444,6 +540,135 @@ export default function BatchVideo() {
                   )}
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPick(e.target.files)} />
+              </div>
+
+              {/* Nhân vật */}
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[13px] font-medium text-mist-200">Nhân vật</p>
+                  <button
+                    onClick={() => setShowCharForm((v) => !v)}
+                    className="flex h-7 items-center gap-1 rounded-lg border border-white/[0.08] px-2.5 text-[12px] text-mist-200 transition hover:border-brand-400/40 hover:text-brand-300"
+                  >
+                    <Plus size={12} /> Thêm
+                  </button>
+                </div>
+
+                {characters.length === 0 && !showCharForm && (
+                  <p className="text-[11.5px] leading-relaxed text-mist-400">
+                    Chưa có nhân vật — thêm tên + ảnh mặt để dùng lại cho nhiều video.
+                  </p>
+                )}
+                {characters.length > 0 && (
+                  <div className="space-y-2">
+                    {characters.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2.5 rounded-xl border border-white/[0.07] bg-[#0d111c] p-2">
+                        <div className="flex shrink-0 -space-x-1.5">
+                          {c.photos.slice(0, 3).map((p) => (
+                            <img key={p.url} src={p.url} alt="" className="h-8 w-8 rounded-lg border border-white/10 object-cover" />
+                          ))}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium text-mist-100">
+                            {c.name}
+                            <span className="ml-1.5 font-normal text-mist-400">{c.photos.length} ảnh</span>
+                          </p>
+                          {c.note && <p className="truncate text-[11.5px] text-mist-400">{c.note}</p>}
+                        </div>
+                        <button
+                          onClick={() => deleteCharacter(c)}
+                          title="Xóa nhân vật"
+                          className="shrink-0 rounded-md p-1 text-mist-400 transition hover:bg-white/5 hover:text-rose-400"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {characters.length > 0 && (
+                  <label className="mt-2 flex cursor-pointer items-center gap-2 text-[12.5px] text-mist-200">
+                    <input
+                      type="checkbox"
+                      checked={keepChar}
+                      onChange={(e) => setKeepChar(e.target.checked)}
+                      className="h-4 w-4 shrink-0 accent-emerald-500"
+                    />
+                    Giữ nguyên nhân vật
+                    {keepChar && (
+                      <select
+                        value={keepCharId || ''}
+                        onChange={(e) => setKeepCharId(e.target.value || null)}
+                        aria-label="Chọn nhân vật giữ nguyên"
+                        className="h-8 min-w-0 flex-1 appearance-none rounded-lg border border-white/[0.07] bg-[#0d111c] px-2 text-[12.5px] text-mist-200 outline-none focus:border-brand-400/50"
+                      >
+                        <option value="">Chọn nhân vật…</option>
+                        {characters.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </label>
+                )}
+
+                {showCharForm && (
+                  <div className="mt-2 space-y-2 rounded-xl border border-white/[0.07] bg-[#0d111c] p-3">
+                    <input
+                      value={charName}
+                      onChange={(e) => setCharName(e.target.value)}
+                      placeholder="Tên nhân vật (ví dụ: Mai)"
+                      className="h-9 w-full rounded-lg border border-white/[0.07] bg-[#0d111c] px-3 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {charPhotos.map((p) => (
+                        <div key={p.url} className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-[#0d111c] py-1 pl-1 pr-2">
+                          <img src={p.url} alt="" className="h-9 w-12 rounded-lg object-cover" />
+                          <button
+                            onClick={() => setCharPhotos((l) => l.filter((x) => x.url !== p.url))}
+                            className="text-mist-400 hover:text-rose-400"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ))}
+                      {charPhotos.length < 3 && (
+                        <button
+                          onClick={() => charFileRef.current?.click()}
+                          title="Tải ảnh mặt lên (tối đa 3 ảnh)"
+                          className="grid h-12 w-12 place-items-center rounded-xl border border-white/[0.07] bg-[#0d111c] text-mist-300 transition hover:border-brand-400/50 hover:text-brand-300"
+                        >
+                          {charUploading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={18} />}
+                        </button>
+                      )}
+                      {charPhotos.length === 0 && (
+                        <span className="text-[11.5px] text-mist-400">Tải 1–3 ảnh mặt</span>
+                      )}
+                    </div>
+                    <input ref={charFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => onPickCharPhotos(e.target.files)} />
+                    <input
+                      value={charNote}
+                      onChange={(e) => setCharNote(e.target.value)}
+                      placeholder="Ghi chú (tùy chọn)"
+                      className="h-9 w-full rounded-lg border border-white/[0.07] bg-[#0d111c] px-3 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveCharacter}
+                        disabled={!charName.trim() || charPhotos.length === 0}
+                        className="mint-btn flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-[13px] font-semibold disabled:opacity-40"
+                      >
+                        <Check size={14} /> Lưu nhân vật
+                      </button>
+                      <button
+                        onClick={() => { setShowCharForm(false); setCharName(''); setCharNote(''); setCharPhotos([]); }}
+                        className="flex h-9 items-center rounded-lg border border-white/[0.08] px-3.5 text-[13px] text-mist-200 transition hover:border-white/20"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Chế độ tham chiếu */}
