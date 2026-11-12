@@ -145,12 +145,12 @@ class AccountPoolManager:
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise MuseGenerationError("等待空闲账号超时，当前所有账号均处于繁忙中")
+                    raise MuseGenerationError("Hết thời gian chờ tài khoản trống, tất cả tài khoản hiện đang bận")
 
                 if account_id:
                     acc = self.store.get_account(account_id)
                     if not acc or not acc.get("enabled", True):
-                        raise MuseAuthError(f"指定账号 {account_id} 不存在或已禁用")
+                        raise MuseAuthError(f"Tài khoản {account_id} không tồn tại hoặc đã bị vô hiệu hoá")
                     if account_id not in self.busy_accounts:
                         self.busy_accounts.add(account_id)
                         return acc
@@ -169,7 +169,7 @@ class AccountPoolManager:
 
                 live = [a for a in self.store.accounts if a.get("enabled", True) and a.get("cookies")]
                 if not live:
-                    raise MuseAuthError("没有可用账号，请先在管理页面导入 cookie")
+                    raise MuseAuthError("Không có tài khoản khả dụng, hãy nhập cookie ở trang quản lý trước")
 
                 self.cond.wait(timeout=min(remaining, 0.5))
 
@@ -214,9 +214,9 @@ def _account_operation(aid: str):
     with ACCOUNT_POOL.cond:
         account = store.get_account(aid)
         if not account:
-            raise HTTPException(404, "账号不存在")
+            raise HTTPException(404, "Tài khoản không tồn tại")
         if aid in ACCOUNT_POOL.busy_accounts:
-            raise HTTPException(409, "账号正在执行任务或检测，请稍后再试")
+            raise HTTPException(409, "Tài khoản đang thực hiện tác vụ hoặc đang kiểm tra, vui lòng thử lại sau")
         ACCOUNT_POOL.busy_accounts.add(aid)
         account = copy.deepcopy(account)
     try:
@@ -265,17 +265,17 @@ async def _validation_exc(request: Request, exc: RequestValidationError):
               for error in exc.errors()]
     if request.url.path.startswith("/v1/"):
         return JSONResponse(status_code=422, content={"error": {
-            "message": "请求参数校验失败：" + str(errors)[:400],
+            "message": "Kiểm tra tham số yêu cầu thất bại: " + str(errors)[:400],
             "type": "invalid_request_error", "param": None, "code": 422}})
     return JSONResponse(status_code=422, content={"detail": errors})
 
 MODELS = [
     {"id": "muse-spark", "object": "model", "owned_by": "muse",
-     "description": "Muse Spark —— 文本 / 代码对话（网页免费额度，支持流式）"},
+     "description": "Muse Spark —— Đối thoại văn bản / mã (hạn mức miễn phí trên web, hỗ trợ streaming)"},
     {"id": "muse-image", "object": "model", "owned_by": "muse",
-     "description": "Muse Image —— 文生图 / 图像编辑（网页免费额度）"},
+     "description": "Muse Image —— Tạo ảnh / chỉnh sửa ảnh từ văn bản (hạn mức miễn phí trên web)"},
     {"id": "muse-video", "object": "model", "owned_by": "muse",
-     "description": "Muse Video —— 文生视频 / 图生视频（网页免费额度）"},
+     "description": "Muse Video —— Tạo video từ văn bản / từ ảnh (hạn mức miễn phí trên web)"},
 ]
 
 # 下游（Codex / Cline / 各种客户端）习惯按 OpenAI、Anthropic 的名字传模型，
@@ -321,11 +321,11 @@ def auth(authorization: str | None = Header(default=None)):
     if not CFG.api_key:
         return True
     if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(401, "缺少 Authorization: Bearer <key>")
+        raise HTTPException(401, "Thiếu Authorization: Bearer <key>")
     parts = authorization.split(None, 1)
     token = parts[1].strip() if len(parts) > 1 else ""
     if not token or token != CFG.api_key:
-        raise HTTPException(401, "API key 无效")
+        raise HTTPException(401, "API key không hợp lệ")
     return True
 
 
@@ -355,7 +355,7 @@ def _renew_and_persist(acc_id: str, wake_vm: bool = True, force: bool = False) -
                                  cookies_exp=res.get("cookies_exp"),
                                  ok=True if res.get("ok") else acc.get("ok"),
                                  synced_at=int(now))
-            store.touch_keepalive(acc_id, True, f"会话正常 (VM: {res.get('vm_state') or 'RUNNING'})")
+            store.touch_keepalive(acc_id, True, f"Phiên bình thường (VM: {res.get('vm_state') or 'RUNNING'})")
     except MuseAuthError as exc:
         store.mark(acc_id, False, str(exc))
         raise
@@ -636,7 +636,7 @@ def _reference_list(images: list | None, legacy: list[Any], field: str,
     """
     primary = next((ref for value in legacy if (ref := _image_value(value))), None)
     if primary and images:
-        raise HTTPException(400, f"{field} 不能与旧版单图字段同时使用")
+        raise HTTPException(400, f"{field} không thể dùng cùng với trường ảnh đơn cũ")
     groups: list[tuple[str, list]] = []
     if primary:
         groups.append((field, [primary]))
@@ -645,17 +645,17 @@ def _reference_list(images: list | None, legacy: list[Any], field: str,
     for name, values in (extra or {}).items():
         if values is not None:
             if not isinstance(values, list):
-                raise HTTPException(400, f"{name} 必须是数组")
+                raise HTTPException(400, f"{name} phải là mảng")
             groups.append((name, values))
     total = sum(len(values) for _, values in groups)
     if total > MAX_REFERENCE_IMAGES:
-        raise HTTPException(400, f"参考素材最多 {MAX_REFERENCE_IMAGES} 个（当前 {total} 个）")
+        raise HTTPException(400, f"Tối đa {MAX_REFERENCE_IMAGES} tài liệu tham chiếu (hiện tại {total})")
     refs = []
     for name, values in groups:
         for index, value in enumerate(values):
             ref = _image_value(value)
             if not ref:
-                raise HTTPException(400, f"{name}[{index}] 不是有效素材引用")
+                raise HTTPException(400, f"{name}[{index}] không phải là tham chiếu tài liệu hợp lệ")
             refs.append(ref)
     return refs
 
@@ -1099,7 +1099,7 @@ def _run_generation(prompt: str, kind: str, timeout: int,
     # Browser ownership covers account selection, retry and cleanup, not just generate().
     deadline = time.monotonic() + max(1, timeout)
     if not GEN_LOCK.acquire(timeout=max(1, timeout)):
-        raise MuseGenerationError("等待浏览器队列超时，请稍后重试")
+        raise MuseGenerationError("Hết thời gian chờ hàng đợi trình duyệt, vui lòng thử lại sau")
     try:
         if on_acquired:
             try:
@@ -1128,7 +1128,7 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
     try:
         for attempt in range(2):
             if deadline is not None and time.monotonic() >= deadline:
-                raise MuseGenerationError("任务总等待时限已到，停止重试")
+                raise MuseGenerationError("Đã hết tổng thời gian chờ tác vụ, dừng thử lại")
             if attempt > 0:
                 if isinstance(last_exc, MuseModelRefusalError):
                     break
@@ -1154,7 +1154,7 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                 engine.start()
                 remaining = int(deadline - time.monotonic()) if deadline is not None else timeout
                 if remaining <= 0:
-                    raise MuseGenerationError("任务总等待时限已到，停止重试")
+                    raise MuseGenerationError("Đã hết tổng thời gian chờ tác vụ, dừng thử lại")
                 refs = list(reference_images or [])
                 engine_kwargs = {}
                 if len(refs) == 1 and not reference_image:
@@ -1174,18 +1174,18 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                 engine.close_current_page()
             except MuseProxyError as exc:
                 last_exc = exc
-                store.touch_keepalive(cur_acc["id"], None, f"代理异常: {str(exc)[:160]}")
+                store.touch_keepalive(cur_acc["id"], None, f"Lỗi proxy: {str(exc)[:160]}")
                 engine.close_current_page()
             except MuseGenerationError as exc:
                 last_exc = exc
-                store.mark(cur_acc["id"], True, f"任务异常: {str(exc)[:60]}")
+                store.mark(cur_acc["id"], True, f"Tác vụ lỗi: {str(exc)[:60]}")
                 try:
                     engine.reset_thread()
                 except Exception:
                     pass
             except Exception as exc:  # noqa: BLE001
                 engine.close_current_page()
-                last_exc = MuseGenerationError(f"生成失败: {exc}")
+                last_exc = MuseGenerationError(f"Tạo thất bại: {exc}")
         raise last_exc
     finally:
         if cur_acc:
@@ -1245,7 +1245,7 @@ def _prepare_reference_images(images: list[str]) -> list[str]:
         total_bytes += len(data)
         if total_bytes > MAX_REFERENCE_TOTAL_BYTES:
             raise HTTPException(
-                400, f"参考素材总大小超过 {MAX_REFERENCE_TOTAL_BYTES // (1024 * 1024)} MiB 限制")
+                400, f"Tổng dung lượng tài liệu tham chiếu vượt quá {MAX_REFERENCE_TOTAL_BYTES // (1024 * 1024)} MiB")
         prepared.append(f"data:{mime};base64,{b64}")
     return prepared
 
@@ -1319,7 +1319,7 @@ def create_image_task(req: ImageRequest,
 def get_image_task(task_id: str, _=Depends(auth)):
     task = store.get_task(task_id)
     if not task or task.get("kind") != "image":
-        raise HTTPException(404, "image task 不存在")
+        raise HTTPException(404, "image task không tồn tại")
     out = dict(task)
     if out.get("status") == "completed":
         req = ImageRequest(prompt=out["prompt"], size=out.get("size"),
@@ -1379,27 +1379,27 @@ async def images_edits(request: Request, _=Depends(auth)):
         img_fields = [(name, value) for name in ("image", "image[]", "video", "audio", "file")
                       for value in form.getlist(name)]
         if len(img_fields) > MAX_REFERENCE_IMAGES:
-            raise HTTPException(400, f"参考素材最多 {MAX_REFERENCE_IMAGES} 个（当前 {len(img_fields)} 个）")
+            raise HTTPException(400, f"Tối đa {MAX_REFERENCE_IMAGES} tài liệu tham chiếu (hiện tại {len(img_fields)})")
         total_upload_bytes = 0
         mib = 1024 * 1024
         for index, (name, img_field) in enumerate(img_fields):
             if img_field and hasattr(img_field, "read"):
                 ref_mime = (getattr(img_field, "content_type", "") or "").split(";", 1)[0].strip().lower()
                 if ref_mime and ref_mime not in REFERENCE_MIME_EXT and not _generic_upload_mime(ref_mime):
-                    raise HTTPException(400, f"{name}[{index}] 文件类型不受支持（{ref_mime}）")
+                    raise HTTPException(400, f"{name}[{index}] loại tệp không được hỗ trợ ({ref_mime})")
                 content = await img_field.read(MAX_REFERENCE_IMAGE_BYTES + 1)
                 if len(content) > MAX_REFERENCE_IMAGE_BYTES:
-                    raise HTTPException(400, f"{name}[{index}] 超过 {MAX_REFERENCE_IMAGE_BYTES // mib} MiB 限制")
+                    raise HTTPException(400, f"{name}[{index}] vượt quá {MAX_REFERENCE_IMAGE_BYTES // mib} MiB")
                 total_upload_bytes += len(content)
                 if total_upload_bytes > MAX_REFERENCE_TOTAL_BYTES:
-                    raise HTTPException(400, f"参考素材总大小超过 {MAX_REFERENCE_TOTAL_BYTES // mib} MiB 限制")
+                    raise HTTPException(400, f"Tổng dung lượng tài liệu tham chiếu vượt quá {MAX_REFERENCE_TOTAL_BYTES // mib} MiB")
                 ref_mime = ref_mime or "application/octet-stream"
                 ref_image_data.append(
                     f"data:{ref_mime};base64,{base64.b64encode(content).decode('ascii')}")
             elif isinstance(img_field, str) and img_field.strip():
                 ref_image_data.append(img_field.strip())
             else:
-                raise HTTPException(400, f"{name}[{index}] 不是有效素材引用")
+                raise HTTPException(400, f"{name}[{index}] không phải là tham chiếu tài liệu hợp lệ")
     else:
         body = await request.json()
         async_mode = body.get("async", False)
@@ -1411,7 +1411,7 @@ async def images_edits(request: Request, _=Depends(auth)):
         timeout = body.get("timeout")
         raw_images = body.get("images")
         if raw_images is not None and not isinstance(raw_images, list):
-            raise HTTPException(400, "images 必须是数组")
+            raise HTTPException(400, "images phải là mảng")
         legacy = [body.get("reference_image"), body.get("image_url"), body.get("image")]
         ref_image_data = _reference_list(raw_images, legacy, "images", {
             name: body.get(name) for name in ("videos", "audios", "files")})
@@ -1493,7 +1493,7 @@ async def create_video(req: VideoRequest, _=Depends(auth)):
 def get_video(task_id: str, _=Depends(auth)):
     t = store.get_task(task_id)
     if not t:
-        raise HTTPException(404, "task 不存在")
+        raise HTTPException(404, "task không tồn tại")
     out = dict(t)
     status = out.get("status")
     if status in ("succeeded", "success", "done"):
@@ -1572,7 +1572,7 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
     """
     prompt = build_chat_prompt(req.messages) or (req.prompt or "").strip()
     if not prompt:
-        raise HTTPException(400, "messages 为空")
+        raise HTTPException(400, "messages trống")
 
     # 工具调用协议默认不注入 —— 实测 muse.ai 的助手会明确拒绝输出"伪工具调用"，
     # 注入反而污染正常回答；详见 config.py 的 tool_protocol 注释。
@@ -1586,7 +1586,7 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
     timeout = int(req.timeout or CFG.chat_timeout)
     acc = store.pick_account(rotate=True)
     if not acc:
-        raise HTTPException(400, "没有可用账号，请先在管理页面导入 cookie")
+        raise HTTPException(400, "Không có tài khoản khả dụng, hãy nhập cookie ở trang quản lý trước")
 
     cid = "chatcmpl-" + uuid.uuid4().hex[:24]
     created = int(time.time())
@@ -1660,14 +1660,14 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
                 store.mark(acc_id, False, str(exc))
                 yield _sse({"error": {"message": str(exc), "type": "auth_error", "code": 401}})
             except MuseGenerationError as exc:
-                store.mark(acc_id, True, f"助手超时: {str(exc)[:60]}")
+                store.mark(acc_id, True, f"Trợ lý quá thời gian: {str(exc)[:60]}")
                 try:
                     engine.reset_thread()
                 except Exception:
                     pass
                 yield _sse({"error": {"message": str(exc), "type": "server_error", "code": 502}})
             except Exception as exc:
-                yield _sse({"error": {"message": f"内部错误: {exc}", "type": "server_error", "code": 500}})
+                yield _sse({"error": {"message": f"Lỗi nội bộ: {exc}", "type": "server_error", "code": 500}})
         return StreamingResponse(sync_stream(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     def run() -> str:
@@ -1742,13 +1742,13 @@ async def responses_api(req: ResponsesRequest, _=Depends(auth)):
     """
     prompt = build_chat_prompt(_responses_messages(req))
     if not prompt:
-        raise HTTPException(400, "input 为空")
+        raise HTTPException(400, "input trống")
 
     model = resolve_model(req.model, default="muse-spark")
     timeout = int(req.timeout or CFG.chat_timeout)
     acc = store.pick_account(rotate=True)
     if not acc:
-        raise HTTPException(400, "没有可用账号，请先在管理页面导入 cookie")
+        raise HTTPException(400, "Không có tài khoản khả dụng, hãy nhập cookie ở trang quản lý trước")
 
     rid = "resp_" + uuid.uuid4().hex[:24]
     mid = "msg_" + uuid.uuid4().hex[:24]
@@ -1822,10 +1822,10 @@ async def responses_api(req: ResponsesRequest, _=Depends(auth)):
 @app.get("/v1/media/{name}")
 def get_media(name: str):
     if "/" in name or "\\" in name or ".." in name:
-        raise HTTPException(400, "非法文件名")
+        raise HTTPException(400, "Tên tệp không hợp lệ")
     p = os.path.join(CFG.media_dir, name)
     if not os.path.isfile(p):
-        raise HTTPException(404, "文件不存在")
+        raise HTTPException(404, "Tệp không tồn tại")
     return FileResponse(p)
 
 
@@ -1881,7 +1881,7 @@ def add_account(req: AccountRequest, _=Depends(auth)):
                       "expires_at": acc.get("expires_at")})
 
     if not added:
-        raise HTTPException(400, "未解析到任何 cookie，请检查格式")
+        raise HTTPException(400, "Không phân tích được cookie nào, hãy kiểm tra định dạng")
 
     if proxy:
         for account in added:
@@ -1892,7 +1892,7 @@ def add_account(req: AccountRequest, _=Depends(auth)):
                if not any(n in c for c in seen)]
     return {"added": added, "count": len(added),
             "essential_missing": missing,
-            "warning": (f"缺少核心 cookie：{', '.join(missing)}，该账号可能无法生成"
+            "warning": (f"Thiếu cookie cốt lõi: {', '.join(missing)}, tài khoản này có thể không tạo được"
                         if missing else "")}
 
 
@@ -1912,21 +1912,21 @@ def patch_account(aid: str, req: AccountPatch, _=Depends(auth)):
     with ACCOUNT_POOL.cond:
         existing = store.get_account(aid)
         if not existing:
-            raise HTTPException(404, "账号不存在")
+            raise HTTPException(404, "Tài khoản không tồn tại")
         changes = {"label": req.label, "enabled": req.enabled}
         if "proxy" in req.model_fields_set:
             if aid in ACCOUNT_POOL.busy_accounts:
-                raise HTTPException(409, "账号正在执行任务或检测，请稍后再修改代理")
+                raise HTTPException(409, "Tài khoản đang thực hiện tác vụ hoặc đang kiểm tra, vui lòng sửa proxy sau")
             proxy = req.proxy.configuration(existing.get("proxy")) if req.proxy else {}
             if proxy != (existing.get("proxy") or {}):
                 changes.update(proxy=proxy, synced_at=0, last_keepalive=0,
                                checked_at=0, proxy_status={}, ok=None,
-                               note="代理已修改，请重新测试")
+                               note="Đã sửa proxy, hãy kiểm tra lại")
                 receipt = _PROXY_TEST_RECEIPTS.get(aid)
                 if (proxy and receipt and 0 <= time.monotonic() - receipt["at"] <= _PROXY_TEST_RECEIPT_TTL
                         and receipt["identity"] == _proxy_test_identity(proxy, existing.get("cookies"))):
                     changes["proxy_status"] = dict(receipt["result"])
-                    changes["note"] = "代理配置已保存，账号浏览器状态待测试"
+                    changes["note"] = "Đã lưu cấu hình proxy, trạng thái trình duyệt của tài khoản đang chờ kiểm tra"
                 engine._last_http_renew.pop(aid, None)
             _PROXY_TEST_RECEIPTS.pop(aid, None)
         acc = store.update_account(aid, **changes)
@@ -1940,7 +1940,7 @@ def test_account_proxy(aid: str, req: ProxyTestRequest | None = None, _=Depends(
     with _account_operation(aid) as acc:
         proxy = req.proxy.configuration(acc.get("proxy")) if req is not None else _account_proxy(acc)
         if not proxy:
-            raise HTTPException(400, "请输入代理链接或先保存该账号的代理")
+            raise HTTPException(400, "Vui lòng nhập liên kết proxy hoặc lưu proxy của tài khoản này trước")
         identity = _proxy_test_identity(proxy, acc.get("cookies"))
         result = {"ok": False, "proxy_configured": True, "proxy_reachable": False,
                   "exit_ip": None, "session_ok": None, "workspace_status": None}
@@ -1952,21 +1952,21 @@ def test_account_proxy(aid: str, req: ProxyTestRequest | None = None, _=Depends(
                                        timeout=(5, 10), allow_redirects=False,
                                        **proxy_options)
             if response.status_code != 200:
-                raise MuseProxyError("代理出口检测未成功，请检查代理连接或认证")
+                raise MuseProxyError("Kiểm tra đầu ra proxy không thành công, hãy kiểm tra kết nối hoặc xác thực proxy")
             result["exit_ip"] = str(ipaddress.ip_address(response.json()["ip"]))
             result["proxy_reachable"] = True
             checked = engine.renew_session_http(acc.get("cookies") or {}, acc.get("cookies_exp"),
                                                 wake_vm=False, proxy=proxy)
             result.update(ok=True, session_ok=True, workspace_status=checked.get("status"),
-                          message="代理出口与 Muse 会话检查通过；生成能力请使用账号测试和实际任务验证")
+                          message="Kiểm tra đầu ra proxy và phiên Muse đã đạt; khả năng tạo hãy kiểm chứng bằng kiểm tra tài khoản và tác vụ thực tế")
         except MuseAuthError:
-            result.update(session_ok=False, message="代理可连接，但 Muse 会话认证失败，请重新导入 Cookie")
+            result.update(session_ok=False, message="Proxy kết nối được, nhưng xác thực phiên Muse thất bại, hãy nhập lại Cookie")
         except MuseProxyError as exc:
             result["message"] = str(exc)
         except MuseGenerationError as exc:
             result.update(session_ok=False, message=str(exc))
         except (requests.RequestException, ValueError, KeyError, TypeError):
-            result["message"] = "代理出口检测失败，请检查代理地址、认证和网络"
+            result["message"] = "Kiểm tra đầu ra proxy thất bại, hãy kiểm tra địa chỉ proxy, xác thực và mạng"
         recorded = {**result, "checked_at": int(time.time())}
         tested_saved = False
         with ACCOUNT_POOL.cond:
@@ -1986,7 +1986,7 @@ def test_account_proxy(aid: str, req: ProxyTestRequest | None = None, _=Depends(
 def del_account(aid: str, _=Depends(auth)):
     ok = store.delete_account(aid)
     if not ok:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Tài khoản không tồn tại")
     with ACCOUNT_POOL.cond:
         _PROXY_TEST_RECEIPTS.pop(aid, None)
     return {"deleted": True, "id": aid}
@@ -1997,9 +1997,9 @@ async def test_account(aid: str, _=Depends(auth)):
     """真实打开 muse.ai 验证该账号 cookie 是否仍可登录。"""
     acc = store.get_account(aid)
     if not acc:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Tài khoản không tồn tại")
     if not acc.get("cookies"):
-        raise HTTPException(400, "该账号没有 cookie")
+        raise HTTPException(400, "Tài khoản này không có cookie")
 
     def _probe():
         with GEN_LOCK, _account_operation(aid) as acc:
@@ -2016,19 +2016,19 @@ async def test_account(aid: str, _=Depends(auth)):
                         quota["checked_at"] = int(time.time())
                         store.update_account(aid, quota=quota)
                     else:
-                        quota_error = "额度面板未读到有效数据；旧缓存未覆盖"
+                        quota_error = "Bảng hạn mức không đọc được dữ liệu hợp lệ; bộ nhớ đệm cũ chưa được ghi đè"
                         quota = None
                 except Exception as exc:  # noqa: BLE001
-                    quota_error = f"{type(exc).__name__}；额度缓存未更新"
-                store.mark(aid, True, "会话有效" + ("；额度读取失败" if quota_error else ""))
-                return {"ok": True, "message": "会话有效，可正常生成",
+                    quota_error = f"{type(exc).__name__}; bộ nhớ đệm hạn mức chưa được cập nhật"
+                store.mark(aid, True, "Phiên hợp lệ" + ("; đọc hạn mức thất bại" if quota_error else ""))
+                return {"ok": True, "message": "Phiên hợp lệ, có thể tạo bình thường",
                         "synced": synced, "quota": quota,
                         "quota_error": quota_error}
             except MuseAuthError as exc:
                 store.mark(aid, False, str(exc)[:200])
                 return {"ok": False, "message": str(exc)[:200]}
             except Exception as exc:  # noqa: BLE001
-                store.touch_keepalive(aid, None, f"测试未确认（保留账号状态）: {str(exc)[:200]}")
+                store.touch_keepalive(aid, None, f"Kiểm tra chưa được xác nhận (giữ nguyên trạng thái tài khoản): {str(exc)[:200]}")
                 return {"ok": False, "message": str(exc)[:200]}
 
     res = await asyncio.to_thread(_probe)
@@ -2049,17 +2049,17 @@ def update_cookies(aid: str, payload: dict = Body(...), _=Depends(auth)):
     if payload.get("cookie_header"):
         cookies.update(parse_cookie_text(payload["cookie_header"]))
     if not cookies:
-        raise HTTPException(400, "未解析到 cookie")
+        raise HTTPException(400, "Không phân tích được cookie")
     exp = {k: int(v) for k, v in (payload.get("expires") or {}).items()
            if _pos(v)}
     # 补入的是「全新会话」的 cookie，有效期估算锚点必须重置到当下，
     # 否则会沿用旧会话的锚点，把剩余天数算少。
     acc = store.update_account(aid, cookies=cookies, ok=None,
-                               note="已更新 cookie",
+                               note="Đã cập nhật cookie",
                                expiry_anchor=int(time.time()),
                                cookies_exp=exp or None)
     if not acc:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Tài khoản không tồn tại")
     return {"ok": True, "id": aid, "cookie_count": len(cookies),
             "expires_at": acc.get("expires_at")}
 
@@ -2068,7 +2068,7 @@ def update_cookies(aid: str, payload: dict = Body(...), _=Depends(auth)):
 def relogin(_=Depends(auth)):
     acc = store.pick_account(rotate=True)
     if not acc:
-        raise HTTPException(400, "没有可用账号")
+        raise HTTPException(400, "Không có tài khoản khả dụng")
     try:
         with GEN_LOCK, _account_operation(acc["id"]) as selected:
             engine.start()
@@ -2091,16 +2091,16 @@ async def query_quota(aid: str, _=Depends(auth)):
     """
     acc = store.get_account(aid)
     if not acc:
-        raise HTTPException(404, "账号不存在")
+        raise HTTPException(404, "Tài khoản không tồn tại")
     if not acc.get("cookies"):
-        raise HTTPException(400, "该账号没有 cookie")
+        raise HTTPException(400, "Tài khoản này không có cookie")
 
     def _probe():
         with GEN_LOCK, _account_operation(aid) as acc:
             engine.start()
             q = engine.quota(acc["cookies"], acc.get("cookies_exp"), account_id=aid)
             if not q.get("found"):
-                raise MuseGenerationError("额度面板未读到有效数据；旧缓存未覆盖")
+                raise MuseGenerationError("Bảng hạn mức không đọc được dữ liệu hợp lệ; bộ nhớ đệm cũ chưa được ghi đè")
             q["checked_at"] = int(time.time())
             store.update_account(aid, quota=q)
             return q
@@ -2115,7 +2115,7 @@ async def query_quota(aid: str, _=Depends(auth)):
     except MuseGenerationError as exc:
         raise HTTPException(502, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"额度查询失败: {exc}") from exc
+        raise HTTPException(502, f"Truy vấn hạn mức thất bại: {exc}") from exc
 
 
 @app.post("/admin/quota")
@@ -2124,7 +2124,7 @@ async def query_any_quota(_=Depends(auth)):
     通常只有一人使用时够用；多账号时建议按账号查）。"""
     acc = store.pick_account(rotate=True)
     if not acc:
-        raise HTTPException(400, "没有可用账号")
+        raise HTTPException(400, "Không có tài khoản khả dụng")
     return await query_quota(acc["id"], _)
 
 
@@ -2151,7 +2151,7 @@ def rotate_apikey(_=Depends(auth)):
     CFG.api_key = new_key
     _persist_env("MUSE2API_KEY", new_key)
     return {"ok": True, "api_key": new_key, "previous": old,
-            "message": "已生成新 Key 并立即生效；旧 Key 已失效，请更新下游项目"}
+            "message": "Đã tạo Key mới và có hiệu lực ngay; Key cũ đã hết hiệu lực, hãy cập nhật dự án phía dưới"}
 
 
 def _persist_env(key: str, value: str):
@@ -2181,7 +2181,7 @@ def cookie_helper(download: int = 0):
     """返回本机取 cookie 的助手脚本（进阶方式，需要装 Python）。"""
     p = os.path.join(BASE_DIR, "tools", "get_muse_cookie.py")
     if not os.path.isfile(p):
-        raise HTTPException(404, "助手脚本缺失")
+        raise HTTPException(404, "Thiếu tập lệnh trợ lý")
     headers = {}
     if download:
         headers["Content-Disposition"] = 'attachment; filename="get_muse_cookie.py"'
@@ -2196,7 +2196,7 @@ def extension_zip():
     """
     src = os.path.join(BASE_DIR, "extension")
     if not os.path.isdir(src):
-        raise HTTPException(404, "扩展目录缺失")
+        raise HTTPException(404, "Thiếu thư mục tiện ích mở rộng")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for root, dirs, names in os.walk(src):
@@ -2219,7 +2219,7 @@ def extension_files():
     """列出扩展目录内容（前端展示用）。"""
     src = os.path.join(BASE_DIR, "extension")
     if not os.path.isdir(src):
-        raise HTTPException(404, "扩展目录缺失")
+        raise HTTPException(404, "Thiếu thư mục tiện ích mở rộng")
     files = []
     for root, dirs, names in os.walk(src):
         dirs.sort()
@@ -2238,7 +2238,7 @@ def admin_tasks(limit: int = 50, _=Depends(auth)):
 @app.delete("/admin/tasks/{tid}")
 def del_task(tid: str, _=Depends(auth)):
     if not store.delete_task(tid):
-        raise HTTPException(404, "任务不存在")
+        raise HTTPException(404, "Tác vụ không tồn tại")
     return {"deleted": True}
 
 
@@ -2270,13 +2270,13 @@ def delete_media(payload: dict = Body(default={}), _=Depends(auth)):
     if isinstance(names, str):
         names = [names]
     if not isinstance(names, list):
-        raise HTTPException(400, "names 必须是文件名数组")
+        raise HTTPException(400, "names phải là mảng tên tệp")
     d = CFG.media_dir
     removed = 0
     errors = []
     for name in names:
         if not isinstance(name, str) or "/" in name or "\\" in name or ".." in name:
-            errors.append(f"非法文件名: {name}")
+            errors.append(f"Tên tệp không hợp lệ: {name}")
             continue
         p = os.path.join(d, name)
         if os.path.isfile(p):
@@ -2291,15 +2291,15 @@ def delete_media(payload: dict = Body(default={}), _=Depends(auth)):
 @app.delete("/admin/media/{name}")
 def delete_single_media(name: str, _=Depends(auth)):
     if "/" in name or "\\" in name or ".." in name:
-        raise HTTPException(400, "非法文件名")
+        raise HTTPException(400, "Tên tệp không hợp lệ")
     p = os.path.join(CFG.media_dir, name)
     if not os.path.isfile(p):
-        raise HTTPException(404, "文件不存在")
+        raise HTTPException(404, "Tệp không tồn tại")
     try:
         os.remove(p)
         return {"status": "ok", "deleted": name}
     except OSError as e:
-        raise HTTPException(500, f"删除失败: {e}")
+        raise HTTPException(500, f"Xoá thất bại: {e}")
 
 
 # ------------------------- 前端页面 -------------------------
@@ -2311,8 +2311,8 @@ def _admin_html() -> str:
     except OSError:
         return ("<!doctype html><meta charset=utf-8><body style='background:#0b0f19;"
                 "color:#e6e8ee;font-family:system-ui;padding:40px'>"
-                "<h2>muse2api</h2><p>管理页面文件 admin.html 缺失。</p>"
-                "<p>接口可用：<code>/v1/images/generations</code>、"
+                "<h2>muse2api</h2><p>Tệp trang quản lý admin.html bị thiếu.</p>"
+                "<p>API khả dụng: <code>/v1/images/generations</code>, "
                 "<code>/v1/videos</code></p></body>")
 
 
@@ -2342,7 +2342,7 @@ def _probe_account_sync(aid: str, check_quota: bool = False) -> dict:
     try:
         with _account_operation(aid) as acc:
             if not acc.get("cookies"):
-                return {"ok": False, "id": aid, "label": acc.get("label", aid), "error": "账号无有效 cookie"}
+                return {"ok": False, "id": aid, "label": acc.get("label", aid), "error": "Tài khoản không có cookie hợp lệ"}
             res = engine.renew_session_http(acc["cookies"], acc.get("cookies_exp"), wake_vm=True,
                                             **({"proxy": _account_proxy(acc)} if _account_proxy(acc) else {}))
             store.update_account(
@@ -2353,7 +2353,7 @@ def _probe_account_sync(aid: str, check_quota: bool = False) -> dict:
                 synced_at=int(time.time()),
             )
             vm_state = res.get("vm_state") or "RUNNING"
-            store.touch_keepalive(aid, True, f"会话有效 · 自动保活 (VM: {vm_state})")
+            store.touch_keepalive(aid, True, f"Phiên hợp lệ · Tự duy trì (VM: {vm_state})")
             quota = acc.get("quota")
             if check_quota and GEN_LOCK.acquire(blocking=False):
                 try:
@@ -2361,7 +2361,7 @@ def _probe_account_sync(aid: str, check_quota: bool = False) -> dict:
                     quota = engine.quota(res["cookies"], res["cookies_exp"],
                                          account_id=aid)
                     if not quota.get("found"):
-                        raise MuseGenerationError("额度面板未读到有效数据；旧缓存未覆盖")
+                        raise MuseGenerationError("Bảng hạn mức không đọc được dữ liệu hợp lệ; bộ nhớ đệm cũ chưa được ghi đè")
                     quota["checked_at"] = int(time.time())
                     store.update_account(aid, quota=quota)
                 except Exception as qe:  # noqa: BLE001
@@ -2382,10 +2382,10 @@ def _probe_account_sync(aid: str, check_quota: bool = False) -> dict:
     except HTTPException as exc:
         return {"ok": False, "id": aid, "busy": exc.status_code == 409, "error": str(exc.detail)}
     except MuseAuthError as exc:
-        store.touch_keepalive(aid, False, f"保活认证失败: {str(exc)[:200]}")
+        store.touch_keepalive(aid, False, f"Xác thực duy trì thất bại: {str(exc)[:200]}")
         return {"ok": False, "id": aid, "error": str(exc)}
     except Exception as exc:
-        store.touch_keepalive(aid, None, f"保活未确认（保留账号状态）: {str(exc)[:200]}")
+        store.touch_keepalive(aid, None, f"Duy trì chưa được xác nhận (giữ nguyên trạng thái tài khoản): {str(exc)[:200]}")
         return {"ok": False, "id": aid, "error": str(exc)}
 
 
@@ -2415,7 +2415,7 @@ async def run_keepalive_all(force: bool = False) -> dict:
                          a.get("ok") is not True))
                 )
                 if not needs_run:
-                    skipped.append({"id": aid, "label": label, "reason": "会话充足且近期已保活"})
+                    skipped.append({"id": aid, "label": label, "reason": "Phiên còn đủ và mới được duy trì gần đây"})
                     continue
 
                 log.info("【自动保活】正在为账号 %s (%s) 执行静默续期与 VM 唤醒...", label, aid)
@@ -2484,7 +2484,7 @@ async def _keepalive_loop():
 async def trigger_keepalive_all(force: bool = True, _=Depends(auth)):
     """管理员手动触发一次全账号保活续期。"""
     if KEEPALIVE_STATE["running"]:
-        return {"status": "busy", "message": "保活任务正在执行中，请稍候"}
+        return {"status": "busy", "message": "Tác vụ duy trì đang chạy, vui lòng chờ"}
     return await run_keepalive_all(force=force)
 
 
@@ -2724,7 +2724,7 @@ def _upgrade_from_github_sync() -> dict:
             timeout=60,
         )
         if resp.status_code != 200:
-            raise HTTPException(502, f"下载 GitHub 更新包失败 (HTTP {resp.status_code})")
+            raise HTTPException(502, f"Tải gói cập nhật GitHub thất bại (HTTP {resp.status_code})")
         protected_files = {".env", "data/accounts.json", "data/tasks.json"}
         with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
             for member in tar.getmembers():
@@ -2759,7 +2759,7 @@ def _upgrade_from_github_sync() -> dict:
     return {
         "ok": True,
         "via": upgraded_via,
-        "message": f"已成功更新至最新版本 {status.get('remote_version')} ({status.get('remote_sha')})",
+        "message": f"Đã cập nhật thành công lên phiên bản mới nhất {status.get('remote_version')} ({status.get('remote_sha')})",
         "status": status,
     }
 
@@ -2808,18 +2808,18 @@ async def admin_repo_push(payload: dict = Body(default={}), _=Depends(auth)):
         if st.stdout.strip():
             c_res = _git(["commit", "-m", msg])
             if c_res.returncode != 0:
-                raise HTTPException(500, f"Git commit 失败: {c_res.stderr or c_res.stdout}")
+                raise HTTPException(500, f"Git commit thất bại: {c_res.stderr or c_res.stdout}")
             committed = True
         p_res = _git(["push", "origin", "HEAD:main"], timeout=60)
         if p_res.returncode != 0:
             err = (p_res.stderr or p_res.stdout or "").strip()
-            raise HTTPException(500, f"Git push 失败: {err[:300]}")
+            raise HTTPException(500, f"Git push thất bại: {err[:300]}")
         _UPDATE_CACHE["ts"] = 0.0
         status = _check_update_sync(force=True)
         return {
             "ok": True,
             "committed": committed,
-            "message": "已成功提交并推送到 GitHub 仓库",
+            "message": "Đã commit và đẩy lên kho GitHub thành công",
             "status": status,
         }
 
@@ -2830,7 +2830,7 @@ async def admin_repo_push(payload: dict = Body(default={}), _=Depends(auth)):
 async def _startup():
     for task in list(store.tasks.values()):
         if task.get("kind") in ("image", "video") and task.get("status") in ("queued", "processing"):
-            store.update_task(task["id"], status="failed", error="服务重启中断了任务，请重新提交")
+            store.update_task(task["id"], status="failed", error="Khởi động lại dịch vụ đã làm gián đoạn tác vụ, hãy gửi lại")
     if not CFG.api_key:
         import secrets
         new_key = "m2a_" + secrets.token_hex(24)
