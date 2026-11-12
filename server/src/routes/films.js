@@ -56,6 +56,26 @@ function listScenes(projectId) {
   return listScenesRaw(projectId).map(shapeScene);
 }
 
+function shapeCharacter(c) {
+  if (!c) return null;
+  let photos = [];
+  try { photos = JSON.parse(c.photos || '[]'); } catch { photos = []; }
+  if (!Array.isArray(photos)) photos = [];
+  return {
+    id: c.id, projectId: c.project_id, name: c.name, description: c.description,
+    photos, createdAt: c.created_at,
+  };
+}
+
+function listFilmCharacters(projectId) {
+  return db.prepare('SELECT * FROM film_characters WHERE project_id = ? ORDER BY created_at ASC').all(projectId).map(shapeCharacter);
+}
+
+function getFilmCharacter(projectId, charId) {
+  const c = db.prepare('SELECT * FROM film_characters WHERE id = ? AND project_id = ?').get(charId, projectId);
+  return c ? shapeCharacter(c) : null;
+}
+
 /** Đồng bộ trạng thái cảnh từ job đã liên kết (worker đã poll sẵn). */
 function syncSceneFromJob(scene) {
   const patch = {};
@@ -253,6 +273,23 @@ function failScene(sceneId, message) {
 async function createSceneImage(userId, scene, aspect) {
   const prompt = (scene.imagePrompt || scene.description || '').trim();
   if (prompt.length < 2) throw new Error('Cảnh chưa có mô tả để tạo ảnh');
+  // Gắn ảnh tham chiếu của nhân vật xuất hiện trong cảnh (khớp theo tên nhân vật)
+  let refs = [];
+  try {
+    const chars = listFilmCharacters(scene.projectId);
+    const sceneText = String(scene.characters || '').toLowerCase();
+    const photos = [];
+    for (const ch of chars) {
+      if (ch.name && sceneText.includes(ch.name.toLowerCase())) {
+        for (const ph of (ch.photos || [])) {
+          if (ph && ph.url) photos.push(ph);
+          if (photos.length >= 3) break;
+        }
+      }
+      if (photos.length >= 3) break;
+    }
+    refs = normalizeRefs(photos);
+  } catch { refs = []; }
   const params = { size: ASPECTS.includes(aspect) ? aspect : '9:16' };
   const cost = priceOf('image', params);
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
@@ -260,7 +297,9 @@ async function createSceneImage(userId, scene, aspect) {
   const job = createJob(userId, 'image', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo ảnh cảnh', job.id);
   try {
-    const out = await muse.createImageTask({ prompt, model: 'muse-image', size: params.size });
+    const payload = { prompt, model: 'muse-image', size: params.size };
+    if (refs.length) payload.images = refs;
+    const out = await muse.createImageTask(payload);
     const upstreamId = out?.id || out?.task_id;
     if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
     updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 10 });
@@ -497,8 +536,105 @@ r.delete('/films/:id', requireAuth, (req, res) => {
   const p = getProject(req.user.id, req.params.id);
   if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
   db.prepare('DELETE FROM film_scenes WHERE project_id = ?').run(p.id);
+  db.prepare('DELETE FROM film_characters WHERE project_id = ?').run(p.id);
   db.prepare('DELETE FROM film_projects WHERE id = ?').run(p.id);
   res.json({ ok: true });
+});
+
+/* ---- Nhân vật tham chiếu của phim ---- */
+r.get('/films/:id/characters', requireAuth, (req, res) => {
+  const p = getProject(req.user.id, req.params.id);
+  if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
+  res.json({ characters: listFilmCharacters(p.id) });
+});
+
+r.post('/films/:id/characters', requireAuth, (req, res) => {
+  const p = getProject(req.user.id, req.params.id);
+  if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
+  const b = req.body || {};
+  const name = String(b.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Hãy nhập tên nhân vật' });
+  const description = String(b.description || '').trim().slice(0, 2000);
+  const photos = Array.isArray(b.photos)
+    ? b.photos.filter((ph) => ph && ph.url).slice(0, 3).map((ph) => ({ url: String(ph.url) }))
+    : [];
+  const id = uid('char_');
+  const ts = now();
+  db.prepare(
+    'INSERT INTO film_characters(id, project_id, name, description, photos, created_at, updated_at) VALUES(?,?,?,?,?,?,?)'
+  ).run(id, p.id, name.slice(0, 100), description, JSON.stringify(photos), ts, ts);
+  res.json({ character: getFilmCharacter(p.id, id) });
+});
+
+r.patch('/films/:id/characters/:charId', requireAuth, (req, res) => {
+  const p = getProject(req.user.id, req.params.id);
+  if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
+  const ch = getFilmCharacter(p.id, req.params.charId);
+  if (!ch) return res.status(404).json({ error: 'Không tìm thấy nhân vật' });
+  const b = req.body || {};
+  const patch = {};
+  if (typeof b.name === 'string' && b.name.trim()) patch.name = b.name.trim().slice(0, 100);
+  if (typeof b.description === 'string') patch.description = b.description.slice(0, 2000);
+  if (Array.isArray(b.photos)) {
+    patch.photos = JSON.stringify(
+      b.photos.filter((ph) => ph && ph.url).slice(0, 3).map((ph) => ({ url: String(ph.url) }))
+    );
+  }
+  if (!Object.keys(patch).length) return res.json({ character: ch });
+  patch.updated_at = now();
+  db.prepare(`UPDATE film_characters SET ${Object.keys(patch).map((k) => `${k} = ?`).join(', ')} WHERE id = ?`)
+    .run(...Object.values(patch), ch.id);
+  res.json({ character: getFilmCharacter(p.id, ch.id) });
+});
+
+r.delete('/films/:id/characters/:charId', requireAuth, (req, res) => {
+  const p = getProject(req.user.id, req.params.id);
+  if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
+  db.prepare('DELETE FROM film_characters WHERE id = ? AND project_id = ?').run(req.params.charId, p.id);
+  res.json({ ok: true });
+});
+
+/* ---- Tạo chân dung cho nhân vật (ảnh tham chiếu) ---- */
+r.post('/films/:id/characters/:charId/portrait', requireAuth, async (req, res) => {
+  const p = getProject(req.user.id, req.params.id);
+  if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
+  const ch = getFilmCharacter(p.id, req.params.charId);
+  if (!ch) return res.status(404).json({ error: 'Không tìm thấy nhân vật' });
+  const prompt = `Chân dung nhân vật ${ch.name}: ${ch.description}. Phong cách ${p.style}, tỷ lệ ${p.aspect}, chính diện, rõ mặt, ánh sáng tự nhiên.`.trim();
+  const params = { size: ASPECTS.includes(p.aspect) ? p.aspect : '9:16' };
+  const cost = priceOf('image', params);
+  const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
+  if (!user || user.credits < cost) return res.status(502).json({ error: `Không đủ điểm (tạo chân dung cần ${cost})` });
+  const job = createJob(req.user.id, 'image', prompt, params, cost);
+  addCredits(req.user.id, -cost, 'Film: tạo chân dung nhân vật', job.id);
+  try {
+    const out = await muse.createImageTask({ prompt, model: 'muse-image', size: params.size });
+    const upstreamId = out?.id || out?.task_id;
+    if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
+    updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 10 });
+    // Chờ worker poll xong job trên server (tối đa 180 giây, kiểm tra mỗi 5 giây)
+    const deadline = Date.now() + 180_000;
+    let mediaUrl = null;
+    while (Date.now() < deadline) {
+      await new Promise((r2) => setTimeout(r2, 5000));
+      const j = getJob(job.id);
+      if (j && j.status === 'completed' && j.mediaUrl) { mediaUrl = j.mediaUrl; break; }
+      if (j && j.status === 'failed') throw new Error(j.error || 'Tạo chân dung thất bại');
+    }
+    if (!mediaUrl) throw new Error('Tạo chân dung quá thời gian chờ');
+    // Thêm ảnh vào nhân vật (tối đa 3 ảnh; đã đủ 3 thì thay ảnh cũ nhất)
+    const photos = [...(ch.photos || [])];
+    if (photos.length >= 3) photos.shift();
+    photos.push({ url: mediaUrl });
+    db.prepare('UPDATE film_characters SET photos = ?, updated_at = ? WHERE id = ?')
+      .run(JSON.stringify(photos), now(), ch.id);
+    res.json({ character: getFilmCharacter(p.id, ch.id) });
+  } catch (e) {
+    updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
+    addCredits(req.user.id, cost, 'Film: hoàn điểm khi tạo chân dung thất bại', job.id);
+    updateJob(job.id, { refunded: 1 });
+    res.status(502).json({ error: `Tạo chân dung thất bại: ${e.message}` });
+  }
 });
 
 /* ---- Kịch bản: Muse viết bằng tiếng Việt ---- */
@@ -537,15 +673,15 @@ r.post('/films/:id/storyboard', requireAuth, async (req, res) => {
       script,
       '',
       `Chia kịch bản thành đúng ${sceneCount} cảnh, mỗi cảnh ${p.sceneDuration} giây, theo trình tự câu chuyện.`,
-      'Mỗi cảnh là một object JSON với các trường (tất cả bằng tiếng Việt, trừ prompt hình/video viết bằng tiếng Anh để tạo media cho chuẩn). Viết NGẮN GỌN, mỗi trường 1-2 câu, image_prompt và video_prompt dưới 60 từ. QUAN TRỌNG: trong lời thoại KHÔNG dùng dấu ngoặc kép ("), viết thoại không có dấu ngoặc hoặc dùng dấu nháy đơn (\'); mọi chuỗi JSON phải hợp lệ, không được để dấu " không escape trong chuỗi:',
+      'Mỗi cảnh là một object JSON với các trường, TẤT CẢ viết bằng tiếng Việt (kể cả image_prompt và video_prompt). QUAN TRỌNG: trong lời thoại KHÔNG dùng dấu ngoặc kép ("), viết thoại không có dấu ngoặc hoặc dùng dấu nháy đơn (\'); mọi chuỗi JSON phải hợp lệ, không được để dấu " không escape trong chuỗi:',
       '- description: mô tả hình ảnh của cảnh (1-2 câu)',
       '- characters: nhân vật xuất hiện trong cảnh',
       '- action: hành động cụ thể diễn ra',
       '- camera: góc quay và chuyển động camera',
       '- lighting: ánh sáng',
       '- setting: bối cảnh',
-      '- image_prompt: prompt tiếng Anh để tạo ảnh tham chiếu cho cảnh (ghi rõ ngoại hình, trang phục nhân vật để nhất quán)',
-      '- video_prompt: prompt tiếng Anh mô tả chuyển động cho cảnh (ngắn gọn, chỉ chuyển động và hành động)',
+      '- image_prompt: prompt tạo ảnh HOÀN CHỈNH VÀ CHI TIẾT cho cảnh, bao gồm đầy đủ: ngoại hình và trang phục nhân vật (mô tả cụ thể, giữ cố định xuyên suốt phim), bối cảnh, ánh sáng, góc quay, phong cách hình ảnh, hành động trong cảnh',
+      '- video_prompt: prompt tạo video CHI TIẾT, mô tả chuyển động, hành động và diễn biến trong cảnh, kèm góc quay và nhịp độ',
       'Giữ ngoại hình nhân vật, trang phục và bối cảnh nhất quán giữa các cảnh.',
     ].join('\n');
     let arr;
@@ -572,8 +708,8 @@ r.post('/films/:id/storyboard', requireAuth, async (req, res) => {
         String(s.camera || '').slice(0, 300),
         String(s.lighting || '').slice(0, 300),
         String(s.setting || '').slice(0, 500),
-        String(s.image_prompt || s.description || '').slice(0, 1000),
-        String(s.video_prompt || s.description || '').slice(0, 1000),
+        String(s.image_prompt || s.description || '').slice(0, 2000),
+        String(s.video_prompt || s.description || '').slice(0, 2000),
         ts, ts,
       );
     });
@@ -601,8 +737,8 @@ r.post('/films/:id/scenes', requireAuth, (req, res) => {
     String(b.description || '').slice(0, 1000), String(b.characters || '').slice(0, 500),
     String(b.action || '').slice(0, 500), String(b.camera || '').slice(0, 300),
     String(b.lighting || '').slice(0, 300), String(b.setting || '').slice(0, 500),
-    String(b.imagePrompt || b.description || '').slice(0, 1000),
-    String(b.videoPrompt || b.description || '').slice(0, 1000),
+    String(b.imagePrompt || b.description || '').slice(0, 2000),
+    String(b.videoPrompt || b.description || '').slice(0, 2000),
     ts, ts,
   );
   res.json({ scene: shapeScene(db.prepare('SELECT * FROM film_scenes WHERE id = ?').get(id)) });
@@ -621,7 +757,10 @@ r.patch('/films/:id/scenes/:sceneId', requireAuth, (req, res) => {
   };
   const patch = {};
   for (const [key, col] of Object.entries(map)) {
-    if (typeof b[key] === 'string') patch[col] = b[key].slice(0, 1000);
+    if (typeof b[key] === 'string') {
+      const limit = (key === 'imagePrompt' || key === 'videoPrompt') ? 2000 : 1000;
+      patch[col] = b[key].slice(0, limit);
+    }
   }
   if (SCENE_DURATIONS.includes(Number(b.duration))) patch.duration = Number(b.duration);
   if (typeof b.order === 'number') patch.sort_order = Math.max(0, Math.floor(b.order));
