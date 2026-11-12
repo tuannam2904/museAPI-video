@@ -17,6 +17,7 @@ import v1Routes from './routes/v1.js';
 import queueRoutes from './routes/queue.js';
 import teamRoutes from './routes/team.js';
 import chatRoutes from './routes/chat.js';
+import analyzeRoutes from './routes/analyze.js';
 import promptsRoutes from './routes/prompts.js';
 import filmsRoutes from './routes/films.js';
 
@@ -63,6 +64,7 @@ app.use('/api', forumRoutes);
 app.use('/api', queueRoutes);
 app.use('/api', teamRoutes);
 app.use('/api', chatRoutes);
+app.use('/api', analyzeRoutes);
 app.use('/api', promptsRoutes);
 app.use('/api', filmsRoutes);
 app.use('/api', genRoutes);
