@@ -1473,72 +1473,77 @@ class MuseEngine:
 
     def chat_stream(self, cookies: dict, prompt: str, expires: dict | None = None,
                     timeout: int | None = None, account_id: str | None = None,
-                    stop_event=None):
+                    stop_event=None, images: list[str] | None = None):
         """发一条消息，流式 yield 增量文本。"""
         timeout = int(timeout or getattr(self.cfg, "chat_timeout", 300))
         self.ensure_page(cookies, expires, account_id=account_id)
         self.reset_thread(for_chat=True)
-        base_agent, base_text, _ = self._poll_chat()
-        self._send(prompt)
+        upload = self._attach_images(images) if images else None
+        try:
+            base_agent, base_text, _ = self._poll_chat()
+            self._send(prompt)
 
-        t_sent = time.time()
-        deadline = t_sent + timeout
-        first_token_deadline = min(deadline, t_sent + 40.0)
-        sent, last, stable = "", None, 0
-        got_first = False
+            t_sent = time.time()
+            deadline = t_sent + timeout
+            first_token_deadline = min(deadline, t_sent + 40.0)
+            sent, last, stable = "", None, 0
+            got_first = False
 
-        # 1. 等待助手生成并开始吐字（高频 60ms 采样，捕获到首批增量文字瞬间 yield 出去）
-        while time.time() < first_token_deadline:
-            if stop_event is not None and stop_event.is_set():
-                return
-            time.sleep(0.06)
-            cnt, cur, has_stop = self._poll_chat()
-            if not cur or (cnt <= base_agent and cur == base_text):
-                if time.time() - t_sent > 14.0:
-                    try:
-                        tail = self.page.js("document.body.innerText.slice(-500)") or ""
-                    except Exception:
-                        tail = ""
-                    if "Still sending" in tail or "Connecting..." in tail:
-                        raise MuseGenerationError("Kết nối VM đám mây quá thời gian (Still sending)")
-                continue
+            # 1. 等待助手生成并开始吐字（高频 60ms 采样，捕获到首批增量文字瞬间 yield 出去）
+            while time.time() < first_token_deadline:
+                if stop_event is not None and stop_event.is_set():
+                    return
+                time.sleep(0.06)
+                cnt, cur, has_stop = self._poll_chat()
+                if not cur or (cnt <= base_agent and cur == base_text):
+                    if time.time() - t_sent > 14.0:
+                        try:
+                            tail = self.page.js("document.body.innerText.slice(-500)") or ""
+                        except Exception:
+                            tail = ""
+                        if "Still sending" in tail or "Connecting..." in tail:
+                            raise MuseGenerationError("Kết nối VM đám mây quá thời gian (Still sending)")
+                    continue
 
-            delta = cur[len(sent):] if cur.startswith(sent) else cur
-            if delta:
-                sent = cur
-                yield delta
-                last = cur
-                got_first = True
-                break
-
-        if not got_first:
-            raise MuseGenerationError("Chờ phản hồi ký tự đầu tiên của trợ lý quá thời gian")
-
-        # 2. 持续捕获增量文本
-        while time.time() < deadline:
-            if stop_event is not None and stop_event.is_set():
-                return
-            time.sleep(0.06)
-            cnt, cur, has_stop = self._poll_chat()
-            if not cur:
-                continue
-
-            if cur != last:
                 delta = cur[len(sent):] if cur.startswith(sent) else cur
                 if delta:
                     sent = cur
                     yield delta
-                last, stable = cur, 0
-            else:
-                stable += 1
-                # Stop 按钮消失说明前端生成彻底结束，连续 3 次（约 0.18s）无新文本即正常退出
-                if not has_stop and stable >= 3:
-                    return
-                # Stop 按钮仍在时绝不过早截断（模型思考、代码块或网络抖动），允许等待至 stable >= 80（约 5s）防卡死
-                if has_stop and stable >= 80:
-                    return
+                    last = cur
+                    got_first = True
+                    break
 
-        raise MuseGenerationError("Chờ trợ lý trả lời quá thời gian")
+            if not got_first:
+                raise MuseGenerationError("Chờ phản hồi ký tự đầu tiên của trợ lý quá thời gian")
+
+            # 2. 持续捕获增量文本
+            while time.time() < deadline:
+                if stop_event is not None and stop_event.is_set():
+                    return
+                time.sleep(0.06)
+                cnt, cur, has_stop = self._poll_chat()
+                if not cur:
+                    continue
+
+                if cur != last:
+                    delta = cur[len(sent):] if cur.startswith(sent) else cur
+                    if delta:
+                        sent = cur
+                        yield delta
+                    last, stable = cur, 0
+                else:
+                    stable += 1
+                    # Stop 按钮消失说明前端生成彻底结束，连续 3 次（约 0.18s）无新文本即正常退出
+                    if not has_stop and stable >= 3:
+                        return
+                    # Stop 按钮仍在时绝不过早截断（模型思考、代码块或网络抖动），允许等待至 stable >= 80（约 5s）防卡死
+                    if has_stop and stable >= 80:
+                        return
+
+            raise MuseGenerationError("Chờ trợ lý trả lời quá thời gian")
+        finally:
+            if upload:
+                shutil.rmtree(upload["dir"], ignore_errors=True)
 
     def chat(self, cookies: dict, prompt: str, expires: dict | None = None,
              timeout: int | None = None, account_id: str | None = None) -> str:

@@ -367,7 +367,7 @@ def _renew_and_persist(acc_id: str, wake_vm: bool = True, force: bool = False) -
 
 
 def safe_chat_stream(cookies: dict, prompt: str, expires: dict | None,
-                     timeout: int, account_id: str | None):
+                     timeout: int, account_id: str | None, images: list | None = None):
     """在独立线程中执行 chat_stream 并持有 GEN_LOCK，通过 Queue 往外吐。
     无论下游客户端何时断连、异常或超时，stop_event + finally 块保证 100% 立即释放 GEN_LOCK，绝不死锁。
     若首字前遇到单账号 VM 卡死或会话异常，自动切换下一个健康账号重试一次。"""
@@ -420,7 +420,7 @@ def safe_chat_stream(cookies: dict, prompt: str, expires: dict | None,
                         engine.start()
                         for chunk in engine.chat_stream(
                             cur_cookies, prompt, cur_exp, timeout,
-                            account_id=cur_id, stop_event=stop_event
+                            account_id=cur_id, stop_event=stop_event, images=images
                         ):
                             yielded = True
                             q.put(("data", chunk))
@@ -526,6 +526,7 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = None
     timeout: int | None = None
     prompt: str | None = None       # 兼容把 prompt 直接放顶层的客户端
+    images: list | None = None      # 参考图片（data URL / URL / 本地路径），附加到对话中让助手看图
     # 下面这些声明出来只是为了「能读到」，muse.ai 端不做对应处理
     tools: list | None = None
     tool_choice: object | None = None
@@ -1593,6 +1594,7 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
     acc_id = acc["id"]
     cookies = acc["cookies"]
     expires = acc.get("cookies_exp")
+    images = req.images or None
 
     def tool_call_deltas(calls: list[dict]) -> list[list[dict]]:
         """按 OpenAI 习惯分两片发：先 id/name，再 arguments 全文。"""
@@ -1609,7 +1611,7 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
                 # 握手建立瞬间立即发送 role: assistant 首包，让下游客户端秒级捕获光标
                 yield _sse(_chat_chunk(cid, created, model, {"role": "assistant"}))
 
-                stream_gen = safe_chat_stream(cookies, prompt, expires, timeout, account_id=acc_id)
+                stream_gen = safe_chat_stream(cookies, prompt, expires, timeout, account_id=acc_id, images=images)
                 if not tool_note:
                     for chunk in stream_gen:
                         for piece in _pace_text(chunk):
@@ -1671,7 +1673,7 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
         return StreamingResponse(sync_stream(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     def run() -> str:
-        return "".join(safe_chat_stream(cookies, prompt, expires, timeout, account_id=acc_id))
+        return "".join(safe_chat_stream(cookies, prompt, expires, timeout, account_id=acc_id, images=images))
 
     try:
         text = await asyncio.to_thread(run)
