@@ -9,7 +9,7 @@ import { fmtAgo } from '../lib/api.js';
 export default function Forum() {
   const { user } = useAuth();
   const toast = useToast();
-  const [categories, setCategories] = useState([{ key: 'all', label: '全部' }]);
+  const [categories, setCategories] = useState([{ key: 'all', label: 'Tất cả' }]);
   const [category, setCategory] = useState('all');
   const [posts, setPosts] = useState([]);
   const [q, setQ] = useState('');
@@ -50,15 +50,15 @@ export default function Forum() {
             <MessageCircle size={22} className="text-white" />
           </div>
           <div>
-            <h1 className="text-[26px] font-semibold tracking-tight text-white">吐槽小会</h1>
-            <p className="mt-1 text-[12.5px] text-mist-400">畅所欲言，图文皆可，友善交流</p>
+            <h1 className="text-[26px] font-semibold tracking-tight text-white">Góc trò chuyện</h1>
+            <p className="mt-1 text-[12.5px] text-mist-400">Nói gì cũng được, có thể kèm ảnh, giao lưu thân thiện</p>
           </div>
         </div>
         <button
           onClick={() => setCompose(true)}
           className="flex items-center gap-1.5 rounded-full brand-gradient px-4 py-2 text-[12.5px] font-medium text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110"
         >
-          <Send size={13} /> 发帖
+          <Send size={13} /> Đăng bài
         </button>
       </div>
 
@@ -87,7 +87,7 @@ export default function Forum() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load()}
-          placeholder="搜索帖子标题或内容"
+          placeholder="Tìm tiêu đề hoặc nội dung bài viết"
           className="h-11 w-full rounded-full border border-[#1e2432] bg-[#0d1119] pl-10 pr-4 text-[12.5px] text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/40"
         />
       </div>
@@ -98,8 +98,8 @@ export default function Forum() {
           <div className="grid place-items-center py-24 text-brand-400"><Loader2 size={20} className="animate-spin" /></div>
         ) : posts.length === 0 ? (
           <div className="rounded-2xl border border-[#1a2030] bg-[#0b0f17]/60 py-24 text-center">
-            <p className="text-[13px] text-mist-300">还没有帖子</p>
-            <p className="mt-1 text-[12px] text-mist-400">发第一帖，占个坑</p>
+            <p className="text-[13px] text-mist-300">Chưa có bài viết</p>
+            <p className="mt-1 text-[12px] text-mist-400">Đăng bài đầu tiên đi</p>
           </div>
         ) : (
           posts.map((p) => (
@@ -135,7 +135,7 @@ export default function Forum() {
                     onClick={() => setOpenPost(p)}
                     className="flex items-center gap-1 text-mist-400 transition hover:text-mist-200"
                   >
-                    <MessageCircle size={12} /> {p.replyCount} 回复
+                    <MessageCircle size={12} /> {p.replyCount} trả lời
                   </button>
                 </div>
               </div>
@@ -168,12 +168,12 @@ function ComposeModal({ open, categories, onClose, onDone }) {
   if (!open) return null;
 
   const submit = async () => {
-    if (!title.trim()) return toast('请填写标题', 'error');
+    if (!title.trim()) return toast('Hãy nhập tiêu đề', 'error');
     setBusy(true);
     try {
       await api.createPost({ title: title.trim(), content, category });
       setTitle(''); setContent('');
-      toast('发布成功', 'ok');
+      toast('Đăng thành công', 'ok');
       onDone();
     } catch (e) {
       toast(e.message, 'error');
@@ -187,7 +187,7 @@ function ComposeModal({ open, categories, onClose, onDone }) {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg rounded-2xl border border-[#1e2432] bg-ink-850 p-5 shadow-2xl fade-in">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-white">发帖</h3>
+          <h3 className="text-[15px] font-semibold text-white">Đăng bài</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-mist-400 hover:bg-ink-700 hover:text-white"><X size={15} /></button>
         </div>
         <div className="space-y-3">
@@ -210,24 +210,24 @@ function ComposeModal({ open, categories, onClose, onDone }) {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="标题"
+            placeholder="Tiêu đề"
             className="h-10 w-full rounded-xl border border-[#1e2432] bg-ink-900 px-3.5 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/50"
           />
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={6}
-            placeholder="说点什么…（图文皆可，友善交流）"
+            placeholder="Nói gì đó… (có thể kèm ảnh, giao lưu thân thiện)"
             className="w-full resize-none rounded-xl border border-[#1e2432] bg-ink-900 px-3.5 py-2.5 text-[13px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/50"
           />
           <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="rounded-lg border border-[#232a38] px-4 py-2 text-[12.5px] text-mist-300">取消</button>
+            <button onClick={onClose} className="rounded-lg border border-[#232a38] px-4 py-2 text-[12.5px] text-mist-300">Hủy</button>
             <button
               onClick={submit}
               disabled={busy}
               className="flex items-center gap-1.5 rounded-lg brand-gradient px-4 py-2 text-[12.5px] font-medium text-white disabled:opacity-50"
             >
-              {busy && <Loader2 size={12} className="animate-spin" />} 发布
+              {busy && <Loader2 size={12} className="animate-spin" />} Đăng
             </button>
           </div>
         </div>
@@ -286,7 +286,7 @@ function PostModal({ post, onClose, onChanged }) {
 
           <div className="mt-5 space-y-3">
             {replies.length === 0 ? (
-              <p className="py-6 text-center text-[12px] text-mist-400">还没有回复</p>
+              <p className="py-6 text-center text-[12px] text-mist-400">Chưa có trả lời</p>
             ) : (
               replies.map((r) => (
                 <div key={r.id} className="flex gap-2.5">
@@ -308,7 +308,7 @@ function PostModal({ post, onClose, onChanged }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && send()}
-            placeholder="写回复…"
+            placeholder="Viết trả lời…"
             className="h-10 flex-1 rounded-xl border border-[#1e2432] bg-ink-900 px-3.5 text-[12.5px] text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/50"
           />
           <button
@@ -316,7 +316,7 @@ function PostModal({ post, onClose, onChanged }) {
             disabled={busy}
             className="flex items-center gap-1.5 rounded-xl brand-gradient px-4 text-[12.5px] font-medium text-white disabled:opacity-50"
           >
-            {busy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} 发送
+            {busy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Gửi
           </button>
         </div>
       </div>

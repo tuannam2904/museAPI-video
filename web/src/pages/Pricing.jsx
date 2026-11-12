@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 
 const IMAGE_MODELS = [
-  { name: 'muse-image', id: 'muse-image', tiers: [{ label: '标准', price: 5 }] },
+  { name: 'muse-image', id: 'muse-image', tiers: [{ label: 'Chuẩn', price: 5 }] },
 ];
 
 export default function Pricing() {
@@ -19,7 +19,7 @@ export default function Pricing() {
   const videoRows = durations.map((d) => ({
     model: 'Muse Video',
     id: 'muse-video',
-    tier: `${d} 秒`,
+    tier: `${d} giây`,
     price: p.videoBase + p.videoPerSecond * d,
   }));
 
@@ -29,16 +29,16 @@ export default function Pricing() {
 
   return (
     <div className="mx-auto max-w-[1180px] px-8 pb-20 pt-6">
-      <h1 className="text-[26px] font-semibold tracking-tight text-white">价目表</h1>
-      <p className="mt-1.5 text-[12.5px] text-mist-400">仅展示已上线并启用的模型，按 1 元 = 10 积分折算。</p>
+      <h1 className="text-[26px] font-semibold tracking-tight text-white">Bảng giá</h1>
+      <p className="mt-1.5 text-[12.5px] text-mist-400">Chỉ hiển thị các mô hình đã ra mắt và đang bật, quy đổi 1 tệ = 10 điểm.</p>
 
       <div className="mt-6 flex items-center gap-3">
         <h2 className="text-[15px] font-semibold text-mist-100">
-          {tab === 'video' ? '视频' : '图片'}
+          {tab === 'video' ? 'Video' : 'Ảnh'}
         </h2>
-        <span className="text-[11.5px] text-mist-400">{rows.length} 个档位</span>
+        <span className="text-[11.5px] text-mist-400">{rows.length} mức giá</span>
         <div className="ml-2 flex gap-1 rounded-full border border-[#1e2432] p-0.5">
-          {[['video', '视频'], ['image', '图片']].map(([k, label]) => (
+          {[['video', 'Video'], ['image', 'Ảnh']].map(([k, label]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -54,16 +54,16 @@ export default function Pricing() {
       </div>
 
       <p className="mt-2 text-[11.5px] text-mist-400">
-        峰谷计价：北京时间工作日 09:00–12:00、14:00–18:00 为峰时，其余时段及周末为谷时。
+        Giá theo giờ cao điểm/thấp điểm: giờ làm việc theo giờ Bắc Kinh 09:00–12:00, 14:00–18:00 là giờ cao điểm, các khung giờ còn lại và cuối tuần là giờ thấp điểm.
       </p>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-[#1a2030]">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-[#1a2030] text-[11px] text-mist-400">
-              <th className="px-4 py-2.5 font-normal">模型</th>
-              <th className="px-4 py-2.5 font-normal">档位</th>
-              <th className="px-4 py-2.5 text-right font-normal">价格</th>
+              <th className="px-4 py-2.5 font-normal">Mô hình</th>
+              <th className="px-4 py-2.5 font-normal">Mức giá</th>
+              <th className="px-4 py-2.5 text-right font-normal">Giá</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#141922]">
@@ -75,7 +75,7 @@ export default function Pricing() {
                 </td>
                 <td className="px-4 py-3 text-[12px] text-mist-300">{r.tier}</td>
                 <td className="px-4 py-3 text-right font-mono text-[12.5px] text-mist-100">
-                  {r.price} 积分
+                  {r.price} điểm
                 </td>
               </tr>
             ))}
@@ -84,8 +84,8 @@ export default function Pricing() {
       </div>
 
       <p className="mt-4 text-[11.5px] leading-relaxed text-mist-400">
-        视频消耗 = 基础价 {p.videoBase} + 每秒 {p.videoPerSecond} 积分 × 时长；任务失败自动退还积分。
-        实际价格以后台配置为准。
+        Video tiêu hao = giá cơ bản {p.videoBase} + mỗi giây {p.videoPerSecond} điểm × thời lượng; tác vụ thất bại sẽ tự động hoàn điểm.
+        Giá thực tế theo cấu hình hệ thống.
       </p>
     </div>
   );

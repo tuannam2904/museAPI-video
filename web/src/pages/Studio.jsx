@@ -9,11 +9,11 @@ import { useAuth } from '../store/auth.jsx';
 import { Badge, Button, Field, Textarea, useToast, Spinner } from '../components/ui.jsx';
 
 const IDEAS = [
-  '雨夜的东京街头，霓虹灯在积水里碎成一片，镜头缓慢推近撑伞的少女',
-  '雪山之巅，云雾翻涌，一只白鹰掠过镜头，光线穿透云层',
-  '古风庭院，红衣女子回眸，落花随风飘过，浅景深',
-  '未来都市的清晨，飞行器穿梭于高塔之间，金色晨光斜照',
-  '咖啡杯里的热气缓缓升起，窗外雪落，慢镜头特写',
+  'Đường phố Tokyo trong đêm mưa, ánh neon vỡ vụn trên vũng nước, máy quay từ từ tiến tới cô gái che ô',
+  'Đỉnh núi tuyết, mây cuộn trào, một con đại bàng trắng lướt qua ống kính, ánh sáng xuyên qua mây',
+  'Sân vườn cổ phong, người phụ nữ áo đỏ ngoái lại, hoa rơi theo gió, độ sâu trường ảnh nông',
+  'Buổi sáng ở thành phố tương lai, phương tiện bay lượn giữa các tòa tháp cao, ánh nắng vàng chiếu xiên',
+  'Hơi nóng bốc lên từ tách cà phê, ngoài cửa sổ tuyết rơi, cận cảnh quay chậm',
 ];
 
 export default function Studio() {
@@ -50,7 +50,7 @@ export default function Studio() {
       setMeta(m);
       if (!m.sizes.includes(size)) setSize(m.sizes[0]);
       if (!m.durations.includes(duration)) setDuration(m.durations[0]);
-    }).catch(() => toast('读取平台配置失败', 'error'));
+    }).catch(() => toast('Không đọc được cấu hình nền tảng', 'error'));
     loadRecent();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -69,11 +69,11 @@ export default function Studio() {
         const { job } = await api.job(active.id);
         setActive(job);
         if (job.status === 'completed') {
-          toast('生成完成', 'ok');
+          toast('Tạo xong', 'ok');
           refresh();
           loadRecent();
         } else if (job.status === 'failed') {
-          toast(job.error || '生成失败，积分已退还', 'error');
+          toast(job.error || 'Tạo thất bại, đã hoàn điểm', 'error');
           refresh();
           loadRecent();
         }
@@ -85,7 +85,7 @@ export default function Studio() {
   const onPickFiles = async (files) => {
     if (!files?.length) return;
     if (refs.length + files.length > 3) {
-      toast('最多 3 张参考图', 'error');
+      toast('Tối đa 3 ảnh tham chiếu', 'error');
       return;
     }
     setUploading(true);
@@ -101,8 +101,8 @@ export default function Studio() {
   };
 
   const submit = async () => {
-    if (prompt.trim().length < 2) return toast('先写点画面描述', 'error');
-    if ((user?.credits ?? 0) < cost) return toast(`积分不足，本次需要 ${cost}`, 'error');
+    if (prompt.trim().length < 2) return toast('Hãy viết mô tả hình ảnh trước', 'error');
+    if ((user?.credits ?? 0) < cost) return toast(`Không đủ điểm, lần này cần ${cost}`, 'error');
     setBusy(true);
     try {
       const { job } = await api.createVideo({
@@ -130,7 +130,7 @@ export default function Studio() {
       <section className="card h-fit p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[15px] font-semibold text-white">
-            <Video size={16} className="text-brand-400" /> 视频生成
+            <Video size={16} className="text-brand-400" /> Tạo video
           </h2>
           <Badge tone="brand">muse-video</Badge>
         </div>
@@ -138,23 +138,23 @@ export default function Studio() {
         <div className="space-y-4">
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[13px] font-medium text-mist-300">画面描述</span>
+              <span className="text-[13px] font-medium text-mist-300">Mô tả hình ảnh</span>
               <button
                 onClick={() => setPrompt(IDEAS[Math.floor(Math.random() * IDEAS.length)])}
                 className="flex items-center gap-1 text-[11.5px] text-brand-400 hover:text-brand-300"
               >
-                <Wand2 size={11} /> 来点灵感
+                <Wand2 size={11} /> Gợi ý
               </button>
             </div>
             <Textarea
               rows={5}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="描述主体、动作、环境、镜头语言。例如：雨后巷口，女孩撑伞回头，慢镜头，浅景深，暖色调"
+              placeholder="Mô tả chủ thể, hành động, bối cảnh, ngôn ngữ ống kính. Ví dụ: con hẻm sau mưa, cô gái che ô ngoái lại, quay chậm, độ sâu trường ảnh nông, tông ấm"
               maxLength={1200}
             />
             <div className="mt-1 flex justify-between text-[11px] text-ink-500">
-              <span>支持中英文混写，越具体的镜头语言成片越稳</span>
+              <span>Hỗ trợ viết lẫn tiếng Trung và tiếng Anh, ngôn ngữ ống kính càng cụ thể thì video càng ổn định</span>
               <span>{prompt.length}/1200</span>
             </div>
           </div>
@@ -162,7 +162,7 @@ export default function Studio() {
           {/* 参考图 */}
           <div>
             <span className="mb-1.5 block text-[13px] font-medium text-mist-300">
-              参考图 <span className="text-ink-500">（可选，首图作起始帧）</span>
+              Ảnh tham chiếu <span className="text-ink-500">(không bắt buộc, ảnh đầu làm khung hình đầu tiên)</span>
             </span>
             <div className="grid grid-cols-4 gap-2">
               {refs.map((r) => (
@@ -182,7 +182,7 @@ export default function Studio() {
                   className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-ink-600 text-[10.5px] text-mist-400 transition hover:border-brand-500/60 hover:text-brand-400"
                 >
                   {uploading ? <Spinner size={14} /> : <ImagePlus size={16} />}
-                  {uploading ? '上传中' : '添加'}
+                  {uploading ? 'Đang tải lên' : 'Thêm'}
                 </button>
               )}
             </div>
@@ -197,7 +197,7 @@ export default function Studio() {
           </div>
 
           {/* 时长 */}
-          <Field label="时长">
+          <Field label="Thời lượng">
             <div className="flex gap-2">
               {(meta?.durations || [5]).map((d) => (
                 <button
@@ -217,7 +217,7 @@ export default function Studio() {
           </Field>
 
           {/* 画幅 */}
-          <Field label="画幅">
+          <Field label="Khung hình">
             <div className="flex gap-2">
               {(meta?.sizes || ['16:9']).map((s) => (
                 <button
@@ -237,15 +237,15 @@ export default function Studio() {
           </Field>
 
           <div className="flex items-center justify-between rounded-xl bg-ink-900 px-3.5 py-3">
-            <span className="text-[12.5px] text-mist-400">预计消耗</span>
-            <span className="text-[15px] font-semibold tabular-nums text-amber-300">{cost} 积分</span>
+            <span className="text-[12.5px] text-mist-400">Dự kiến tiêu hao</span>
+            <span className="text-[15px] font-semibold tabular-nums text-amber-300">{cost} điểm</span>
           </div>
 
           <Button size="lg" className="w-full" loading={busy || running} onClick={submit} disabled={running}>
-            {running ? '生成中…' : <><Sparkles size={16} /> 开始生成</>}
+            {running ? 'Đang tạo…' : <><Sparkles size={16} /> Bắt đầu tạo</>}
           </Button>
           <p className="text-center text-[11px] text-ink-500">
-            单条 5–10 秒，通常 1–3 分钟出片，失败自动退还积分
+            Mỗi video 5–10 giây, thường 1–3 phút là xong, thất bại sẽ tự động hoàn điểm
           </p>
         </div>
       </section>
@@ -258,9 +258,9 @@ export default function Studio() {
           <div className="card p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="flex items-center gap-2 text-[13.5px] font-semibold text-mist-200">
-                <Clock size={14} className="text-mist-400" /> 最近生成
+                <Clock size={14} className="text-mist-400" /> Tạo gần đây
               </h3>
-              <a href="/works" className="text-[12px] text-brand-400 hover:text-brand-300">全部作品 →</a>
+              <a href="/works" className="text-[12px] text-brand-400 hover:text-brand-300">Tất cả tác phẩm →</a>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
               {recent.map((j) => (
@@ -273,7 +273,7 @@ export default function Studio() {
                     <video src={j.mediaUrl} muted className="h-full w-full object-cover opacity-80 group-hover:opacity-100" />
                   ) : (
                     <div className="grid h-full place-items-center text-[10px] text-ink-500">
-                      {j.status === 'failed' ? '失败' : j.status === 'completed' ? '无预览' : '生成中'}
+                      {j.status === 'failed' ? 'Thất bại' : j.status === 'completed' ? 'Không có xem trước' : 'Đang tạo'}
                     </div>
                   )}
                   <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1 text-left text-[10px] text-white/85">
@@ -291,9 +291,9 @@ export default function Studio() {
 
 function GuidePanel({ accountCount }) {
   const steps = [
-    { n: '01', t: '导入 Muse 账号', d: '粘贴一次 Cookie，账号进池后自动被调度' },
-    { n: '02', t: '写清镜头语言', d: '主体 + 动作 + 环境 + 运镜，越具体越稳' },
-    { n: '03', t: '出片并下载', d: '1–3 分钟成片，作品库可随时回看' },
+    { n: '01', t: 'Nhập tài khoản Muse', d: 'Dán Cookie một lần, tài khoản vào pool sẽ tự động được điều phối' },
+    { n: '02', t: 'Viết rõ ngôn ngữ ống kính', d: 'Chủ thể + hành động + bối cảnh + chuyển động máy, càng cụ thể càng ổn' },
+    { n: '03', t: 'Tạo xong và tải xuống', d: '1–3 phút là xong, thư viện tác phẩm xem lại bất cứ lúc nào' },
   ];
   return (
     <div className="card overflow-hidden">
@@ -303,10 +303,10 @@ function GuidePanel({ accountCount }) {
         <div className="relative">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-400">Workspace</p>
           <h3 className="mt-2 text-[22px] font-semibold tracking-tight text-white">
-            三步做出一条<span className="brand-text"> 能用的片子</span>
+            Ba bước để tạo ra một<span className="brand-text"> video dùng được</span>
           </h3>
           <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-mist-400">
-            平台把 Muse 网页端能力封成了标准接口，账号池在后台轮转，你只管描述画面。
+            Nền tảng đã đóng gói khả năng của Muse bản web thành giao diện chuẩn, pool tài khoản luân chuyển ở phía sau, bạn chỉ cần mô tả hình ảnh.
           </p>
         </div>
 
@@ -325,9 +325,9 @@ function GuidePanel({ accountCount }) {
             <div className="flex items-start gap-2.5">
               <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-300" />
               <div>
-                <p className="text-[13px] font-medium text-amber-200">还没有可用账号</p>
+                <p className="text-[13px] font-medium text-amber-200">Chưa có tài khoản khả dụng</p>
                 <p className="mt-0.5 text-[11.5px] text-amber-200/70">
-                  生成前必须先导入一个 muse.ai 账号的 Cookie，否则上游会直接拒绝
+                  Trước khi tạo phải nhập Cookie của một tài khoản muse.ai, nếu không máy chủ sẽ từ chối thẳng
                 </p>
               </div>
             </div>
@@ -335,7 +335,7 @@ function GuidePanel({ accountCount }) {
               href="/accounts"
               className="shrink-0 rounded-lg bg-amber-400 px-3 py-1.5 text-[12.5px] font-semibold text-amber-950 transition hover:bg-amber-300"
             >
-              去导入 →
+              Đi nhập →
             </a>
           </div>
         )}
@@ -352,8 +352,8 @@ export function ResultPanel({ job, compact }) {  if (!job) {
             <Play size={22} />
           </div>
           <div>
-            <p className="text-[14px] font-medium text-mist-200">还没有生成结果</p>
-            <p className="mt-1 text-[12px] text-mist-400">写好描述，点「开始生成」</p>
+            <p className="text-[14px] font-medium text-mist-200">Chưa có kết quả tạo</p>
+            <p className="mt-1 text-[12px] text-mist-400">Viết mô tả xong, bấm "Bắt đầu tạo"</p>
           </div>
         </div>
       </div>
@@ -376,14 +376,14 @@ export function ResultPanel({ job, compact }) {  if (!job) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={done ? 'ok' : failed ? 'error' : 'brand'}>
-            {done ? '已完成' : failed ? '失败' : job.status === 'processing' ? '生成中' : '排队中'}
+            {done ? 'Hoàn thành' : failed ? 'Thất bại' : job.status === 'processing' ? 'Đang tạo' : 'Đang chờ'}
           </Badge>
           {url && (
             <a
               href={url}
               download
               className="rounded-lg border border-ink-600 p-1.5 text-mist-300 transition hover:border-ink-500 hover:text-white"
-              title="下载"
+              title="Tải xuống"
             >
               <Download size={13} />
             </a>
@@ -403,7 +403,7 @@ export function ResultPanel({ job, compact }) {  if (!job) {
             {running ? (
               <div className="w-full max-w-xs px-6">
                 <div className="mb-3 flex items-center justify-between text-[12px] text-mist-400">
-                  <span>正在渲染</span>
+                  <span>Đang dựng</span>
                   <span className="tabular-nums">{job.progress || 0}%</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-ink-700">
@@ -413,14 +413,14 @@ export function ResultPanel({ job, compact }) {  if (!job) {
                   />
                 </div>
                 <p className="mt-3 text-center text-[11px] text-ink-500">
-                  上游浏览器正在跑，别关页面
+                  Trình duyệt máy chủ đang chạy, đừng đóng trang
                 </p>
               </div>
             ) : failed ? (
               <div className="max-w-sm px-6 text-center">
                 <AlertTriangle size={22} className="mx-auto mb-2 text-rose-400" />
-                <p className="text-[13px] text-rose-300">{job.error || '生成失败'}</p>
-                {job.refunded && <p className="mt-1 text-[11.5px] text-ink-500">积分已自动退还</p>}
+                <p className="text-[13px] text-rose-300">{job.error || 'Tạo thất bại'}</p>
+                {job.refunded && <p className="mt-1 text-[11.5px] text-ink-500">Điểm đã tự động hoàn lại</p>}
               </div>
             ) : (
               <RefreshCw size={20} className="text-ink-500" />
@@ -431,9 +431,9 @@ export function ResultPanel({ job, compact }) {  if (!job) {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-[11.5px] text-ink-500">
         <span>{job.params?.duration || 5}s · {job.params?.size || '16:9'}</span>
-        <span>消耗 {job.cost} 积分</span>
+        <span>Tiêu hao {job.cost} điểm</span>
         {job.createdAt && <span>{fmtAgo(job.createdAt)}</span>}
-        {job.accountId && <span className="truncate">账号 {job.accountId.slice(0, 10)}</span>}
+        {job.accountId && <span className="truncate">Tài khoản {job.accountId.slice(0, 10)}</span>}
       </div>
     </div>
   );

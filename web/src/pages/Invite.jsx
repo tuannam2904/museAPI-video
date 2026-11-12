@@ -17,9 +17,9 @@ export default function Invite() {
       await navigator.clipboard.writeText(text);
       setCopied(key);
       setTimeout(() => setCopied(''), 1600);
-      toast('已复制', 'ok');
+      toast('Đã sao chép', 'ok');
     } catch {
-      toast('复制失败，请手动选中', 'error');
+      toast('Sao chép thất bại, hãy chọn thủ công', 'error');
     }
   };
 
@@ -32,16 +32,16 @@ export default function Invite() {
       <p className="eyebrow">Invite</p>
       <h1 className="mt-2 flex items-center gap-2.5 text-[30px] font-semibold tracking-tight text-white">
         <Gift size={24} className="text-brand-400" strokeWidth={1.6} />
-        邀请送积分
+        Mời bạn nhận điểm
       </h1>
-      <p className="mt-1.5 text-[12.5px] text-mist-400">邀请好友注册，双方各得 {data.reward.inviter} 积分</p>
+      <p className="mt-1.5 text-[12.5px] text-mist-400">Mời bạn bè đăng ký, cả hai cùng nhận {data.reward.inviter} điểm</p>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* 邀请卡 */}
         <div className="relative overflow-hidden rounded-2xl border border-brand-500/25 bg-gradient-to-br from-brand-500/[0.12] to-transparent p-6">
           <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-500/20 blur-3xl" />
           <div className="relative">
-            <p className="text-[12px] text-mist-300">我的邀请码</p>
+            <p className="text-[12px] text-mist-300">Mã mời của tôi</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="font-display text-[32px] font-bold tracking-[0.12em] text-white">{data.code}</span>
               <button
@@ -49,11 +49,11 @@ export default function Invite() {
                 className="flex items-center gap-1 rounded-lg border border-[#232a38] px-2.5 py-1.5 text-[11.5px] text-mist-300 transition hover:border-brand-500/50 hover:text-white"
               >
                 {copied === 'code' ? <CheckCircle2 size={11} /> : <Copy size={11} />}
-                {copied === 'code' ? '已复制' : '复制'}
+                {copied === 'code' ? 'Đã sao chép' : 'Sao chép'}
               </button>
             </div>
 
-            <p className="mt-5 text-[12px] text-mist-300">邀请链接</p>
+            <p className="mt-5 text-[12px] text-mist-300">Link mời</p>
             <div className="mt-1.5 flex gap-2">
               <div className="min-w-0 flex-1 truncate rounded-lg border border-[#232a38] bg-black/30 px-3 py-2 font-mono text-[11px] text-mist-300">
                 {data.link}
@@ -62,12 +62,12 @@ export default function Invite() {
                 onClick={() => copy(data.link, 'link')}
                 className="flex items-center gap-1 rounded-lg brand-gradient px-3 py-2 text-[11.5px] font-medium text-white"
               >
-                <Share2 size={11} /> {copied === 'link' ? '已复制' : '复制'}
+                <Share2 size={11} /> {copied === 'link' ? 'Đã sao chép' : 'Sao chép'}
               </button>
             </div>
 
             <p className="mt-4 text-[11px] leading-relaxed text-mist-400">
-              好友通过该链接注册后：你得 {data.reward.inviter} 积分，好友额外得 {data.reward.invitee} 积分。
+              Sau khi bạn bè đăng ký qua link này: bạn nhận {data.reward.inviter} điểm, bạn bè nhận thêm {data.reward.invitee} điểm.
             </p>
           </div>
         </div>
@@ -76,19 +76,19 @@ export default function Invite() {
         <div className="space-y-4">
           <div className="card p-4">
             <div className="flex items-center justify-between">
-              <span className="text-[11.5px] text-mist-400">已邀请</span>
+              <span className="text-[11.5px] text-mist-400">Đã mời</span>
               <Users size={13} className="text-brand-400" />
             </div>
             <p className="mt-1.5 font-display text-[26px] font-bold leading-none text-white">{data.total}</p>
-            <p className="mt-1 font-mono text-[10.5px] text-mist-400">人</p>
+            <p className="mt-1 font-mono text-[10.5px] text-mist-400">người</p>
           </div>
 
           <div className="card p-4">
-            <p className="text-[11.5px] text-mist-400">累计获得</p>
+            <p className="text-[11.5px] text-mist-400">Đã nhận tổng</p>
             <p className="mt-1.5 font-display text-[26px] font-bold leading-none text-gold-400">
               {data.total * data.reward.inviter}
             </p>
-            <p className="mt-1 font-mono text-[10.5px] text-mist-400">积分</p>
+            <p className="mt-1 font-mono text-[10.5px] text-mist-400">điểm</p>
           </div>
         </div>
       </div>
@@ -96,10 +96,10 @@ export default function Invite() {
       {/* 列表 */}
       <div className="mt-5 card overflow-hidden">
         <div className="border-b border-[#1e2432] px-4 py-3">
-          <h2 className="text-[13px] font-semibold text-mist-200">邀请记录</h2>
+          <h2 className="text-[13px] font-semibold text-mist-200">Lịch sử mời</h2>
         </div>
         {data.invited.length === 0 ? (
-          <p className="py-10 text-center text-[12px] text-mist-400">还没有邀请记录，把链接发给朋友吧</p>
+          <p className="py-10 text-center text-[12px] text-mist-400">Chưa có lịch sử mời, hãy gửi link cho bạn bè</p>
         ) : (
           <div className="divide-y divide-[#141922]">
             {data.invited.map((u, i) => (

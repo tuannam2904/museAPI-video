@@ -20,15 +20,15 @@ export default function Team() {
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const transfer = async () => {
-    if (!email.trim()) return toast('请填写对方邮箱', 'error');
+    if (!email.trim()) return toast('Hãy nhập email của người nhận', 'error');
     const n = Number(amount);
-    if (!Number.isFinite(n) || n <= 0) return toast('请输入有效的积分数', 'error');
+    if (!Number.isFinite(n) || n <= 0) return toast('Hãy nhập số điểm hợp lệ', 'error');
     setBusy(true);
     try {
       await api.transferCredits(email.trim(), n);
       await refresh();
       setEmail(''); setAmount('');
-      toast(`已转赠 ${n} 积分`, 'ok');
+      toast(`Đã tặng ${n} điểm`, 'ok');
       load();
     } catch (e) {
       toast(e.message, 'error');
@@ -42,9 +42,9 @@ export default function Team() {
       await navigator.clipboard.writeText(data.inviteCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-      toast('已复制邀请码', 'ok');
+      toast('Đã sao chép mã mời', 'ok');
     } catch {
-      toast('复制失败', 'error');
+      toast('Sao chép thất bại', 'error');
     }
   };
 
@@ -57,16 +57,16 @@ export default function Team() {
       <p className="eyebrow">Team</p>
       <h1 className="mt-2 flex items-center gap-2.5 text-[30px] font-semibold tracking-tight text-white">
         <Users size={24} className="text-brand-400" strokeWidth={1.6} />
-        团队模式
+        Chế độ nhóm
       </h1>
-      <p className="mt-1.5 text-[12.5px] text-mist-400">邀请成员加入，共享积分与协作</p>
+      <p className="mt-1.5 text-[12.5px] text-mist-400">Mời thành viên tham gia, chia sẻ điểm và cộng tác</p>
 
       {/* 统计 */}
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {[
-          ['直属成员', data.stats.direct, UserCheck],
-          ['二级成员', data.stats.second, Users],
-          ['邀请获得', data.stats.creditsEarned, Crown],
+          ['Thành viên trực tiếp', data.stats.direct, UserCheck],
+          ['Thành viên cấp 2', data.stats.second, Users],
+          ['Điểm từ lời mời', data.stats.creditsEarned, Crown],
         ].map(([label, value, Icon]) => (
           <div key={label} className="card p-4">
             <div className="flex items-center justify-between">
@@ -82,17 +82,17 @@ export default function Team() {
         {/* 成员列表 */}
         <div className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-[#1e2432] px-4 py-3">
-            <h2 className="text-[13.5px] font-semibold text-mist-200">团队成员（{data.members.length}）</h2>
+            <h2 className="text-[13.5px] font-semibold text-mist-200">Thành viên nhóm（{data.members.length}）</h2>
             <button className="flex items-center gap-1 text-[11.5px] text-brand-400 hover:text-brand-300">
-              <UserPlus size={12} /> 邀请成员
+              <UserPlus size={12} /> Mời thành viên
             </button>
           </div>
 
           {data.members.length === 0 ? (
             <div className="grid place-items-center py-16 text-center">
               <Users size={26} className="text-mist-400/50" />
-              <p className="mt-2 text-[12.5px] text-mist-300">还没有团队成员</p>
-              <p className="mt-0.5 text-[11.5px] text-mist-400">把邀请码发给朋友，注册后自动进入团队</p>
+              <p className="mt-2 text-[12.5px] text-mist-300">Chưa có thành viên nhóm</p>
+              <p className="mt-0.5 text-[11.5px] text-mist-400">Gửi mã mời cho bạn bè, sau khi đăng ký sẽ tự động vào nhóm</p>
             </div>
           ) : (
             <div className="divide-y divide-[#141922]">
@@ -109,7 +109,7 @@ export default function Team() {
                           'rounded px-1 py-0.5 text-[9.5px]',
                           m.level === 1 ? 'bg-brand-500/15 text-brand-300' : 'bg-[#2a3040] text-mist-300'
                         )}>
-                          {m.level === 1 ? '直属' : '二级'}
+                          {m.level === 1 ? 'Trực tiếp' : 'Cấp 2'}
                         </span>
                       </div>
                       <p className="font-mono text-[10px] text-ink-500">{m.email}</p>
@@ -129,21 +129,21 @@ export default function Team() {
         <div className="space-y-4">
           <div className="card p-4">
             <h3 className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold text-mist-200">
-              <Send size={13} className="text-brand-400" /> 积分转赠
+              <Send size={13} className="text-brand-400" /> Tặng điểm
             </h3>
-            <p className="mb-3 text-[11px] text-mist-400">当前余额 <span className="font-mono text-gold-400">{user?.credits?.toLocaleString()}</span></p>
+            <p className="mb-3 text-[11px] text-mist-400">Số dư hiện tại <span className="font-mono text-gold-400">{user?.credits?.toLocaleString()}</span></p>
 
             <div className="space-y-2">
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="对方注册邮箱"
+                placeholder="Email đăng ký của người nhận"
                 className="h-9 w-full rounded-lg border border-[#1e2432] bg-ink-900 px-3 text-[12px] text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/50"
               />
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                placeholder="积分数"
+                placeholder="Số điểm"
                 className="h-9 w-full rounded-lg border border-[#1e2432] bg-ink-900 px-3 font-mono text-[12px] text-mist-100 outline-none placeholder:text-mist-400/60 focus:border-brand-500/50"
               />
               <button
@@ -151,13 +151,13 @@ export default function Team() {
                 disabled={busy}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg brand-gradient py-2 text-[12px] font-medium text-white disabled:opacity-50"
               >
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} 确认转赠
+                {busy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Xác nhận tặng
               </button>
             </div>
           </div>
 
           <div className="card p-4">
-            <h3 className="mb-1.5 text-[13px] font-semibold text-mist-200">团队邀请码</h3>
+            <h3 className="mb-1.5 text-[13px] font-semibold text-mist-200">Mã mời nhóm</h3>
             <div className="flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2">
               <span className="flex-1 font-mono text-[13px] tracking-wider text-brand-300">{data.inviteCode}</span>
               <button onClick={copyCode} className="text-mist-400 hover:text-white">
@@ -165,7 +165,7 @@ export default function Team() {
               </button>
             </div>
             <p className="mt-2 text-[10.5px] leading-relaxed text-mist-400">
-              成员用同一个邀请码注册后自动归属于你；已有账号可通过「加入团队」填写。
+              Thành viên đăng ký bằng cùng mã mời sẽ tự động thuộc về bạn; tài khoản đã có có thể nhập qua "Tham gia nhóm".
             </p>
           </div>
         </div>

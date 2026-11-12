@@ -131,7 +131,7 @@ export default function Bind() {
                   <p className="mt-1 text-[11.5px] leading-relaxed text-mist-400">
                     {extDetected
                       ? 'Nếu cứ dừng ở đây, nhiều khả năng trình duyệt này chưa đăng nhập muse.ai. Hãy đăng nhập rồi làm mới trang.'
-                      : 'Trang này cần tiện ích «MuseAPI-Video Liên kết» mới tự đọc được. Nếu chưa cài, xem hướng dẫn bên dưới.'}
+                      : 'Trang này cần tiện ích «Aimi Muse Studio Liên kết» mới tự đọc được. Nếu chưa cài, xem hướng dẫn bên dưới.'}
                   </p>
                 </div>
               </div>
