@@ -30,6 +30,8 @@ export default function NodeInspector({
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [assisting, setAssisting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState('');
   const theme = getCanvasTheme();
 
   if (!node) return null;
@@ -41,6 +43,34 @@ export default function NodeInspector({
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const cost = isImage ? 5 : isVideo ? 10 + 2 * (node.duration || 5) : 0;
+
+  // Ảnh tham chiếu nối vào nút video (bỏ qua đầu vào đã tắt): dùng để phân tích.
+  const imageInputs = isVideo
+    ? (inputs || []).filter((n) => n.type === 'image' && n.mediaUrl && !(node.disabledInputs || []).includes(n.id))
+    : [];
+
+  // Đọc ảnh tham chiếu rồi viết prompt video tiếng Việt (theo kỹ năng viết prompt).
+  const analyzeImages = async () => {
+    if (!imageInputs.length || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const out = await api.analyzeImage({
+        images: imageInputs.map((n, i) => ({ url: n.mediaUrl, label: n.text?.trim() || `Ảnh ${i + 1}` })),
+        motion: node.text || '',
+      });
+      if (out.descriptions) setAnalysis(out.descriptions);
+      if (out.videoPrompt) {
+        onUpdate({ text: out.videoPrompt });
+        toast('Đã viết prompt từ ảnh — bạn có thể sửa trước khi tạo', 'ok');
+      } else {
+        toast('Đã phân tích ảnh, nhưng chưa viết được prompt — hãy tự viết từ phần mô tả', 'info');
+      }
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   // Nhờ Muse viết lại câu lệnh bằng tiếng Việt (dùng tài khoản Muse đã liên kết)
   const assistPrompt = async () => {
@@ -216,6 +246,26 @@ export default function NodeInspector({
         <p className="mt-2 text-[11px] leading-relaxed text-mist-400">
           Chưa có đầu vào — kéo chấm tròn từ nút văn bản/ảnh vào nút này để thêm tham chiếu.
         </p>
+      )}
+
+      {/* Phân tích ảnh (chỉ nút video có ảnh tham chiếu nối vào):
+          đọc ảnh rồi viết prompt video tiếng Việt theo kỹ năng viết prompt. */}
+      {isVideo && imageInputs.length > 0 && (
+        <div className="mt-2">
+          <button
+            onClick={analyzeImages}
+            disabled={analyzing}
+            className="flex h-8 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-400/30 text-[12px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+          >
+            {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+            {analyzing ? 'Đang đọc ảnh…' : 'Phân tích ảnh'}
+          </button>
+          {analysis && (
+            <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/[0.07] bg-[#0d111c] p-2.5 text-[11.5px] leading-relaxed text-mist-300">
+              {analysis}
+            </p>
+          )}
+        </div>
       )}
 
       {/* Chân: tạo / tải lên / xóa */}
