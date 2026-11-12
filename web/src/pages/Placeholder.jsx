@@ -20,10 +20,10 @@ export default function Placeholder({ title, sub, eyebrow, desc }) {
           <p className="text-[14px] font-medium text-mist-200">Mô-đun này đang được phát triển</p>
           <p className="mt-2 text-[12.5px] leading-relaxed text-mist-400">{desc}</p>
           <button
-            onClick={() => nav('/create')}
+            onClick={() => nav('/canvas')}
             className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-[#232a38] px-4 py-2 text-[12.5px] text-mist-200 transition hover:border-brand-500/50 hover:text-white"
           >
-            Tới Tạo nhanh trước <ArrowRight size={13} />
+            Tới Canvas trước <ArrowRight size={13} />
           </button>
         </div>
       </div>

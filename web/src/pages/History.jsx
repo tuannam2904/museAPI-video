@@ -86,7 +86,7 @@ export default function History() {
             <p className="text-[14px] text-mist-300">Chưa có lịch sử</p>
             <p className="mt-1 text-[12px] text-mist-400">Hãy đến trung tâm sáng tạo để gửi một tác vụ</p>
             <button
-              onClick={() => nav('/create')}
+              onClick={() => nav('/canvas')}
               className="mt-5 rounded-full brand-gradient px-6 py-2.5 text-[13px] font-medium text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110"
             >
               Đến trung tâm sáng tạo
@@ -157,7 +157,7 @@ export default function History() {
                       </>
                     )}
                     <button
-                      onClick={() => nav('/create')}
+                      onClick={() => nav('/canvas')}
                       className="grid h-7 w-7 place-items-center rounded-md text-mist-400 transition hover:bg-ink-700 hover:text-brand-300"
                       title="Tạo lại"
                     >

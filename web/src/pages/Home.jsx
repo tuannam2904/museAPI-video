@@ -150,7 +150,7 @@ export default function Home() {
               Tổng <span className="font-mono text-mist-200">{works.length}</span> tác phẩm · Bấm ♥ để thích
             </span>
             <button
-              onClick={() => nav('/create')}
+              onClick={() => nav('/canvas')}
               className="flex items-center gap-1.5 rounded-full border border-[#232a38] bg-ink-850 px-4 py-2 text-[12.5px] text-mist-200 transition hover:border-brand-500/50 hover:text-white"
             >
               <Upload size={13} /> Đăng tác phẩm
@@ -173,7 +173,7 @@ export default function Home() {
               <p className="text-[14px] font-medium text-mist-200">Quảng trường vẫn trống</p>
               <p className="mt-1 text-[12.5px] text-mist-400">Tạo tác phẩm đầu tiên, nó sẽ xuất hiện tại đây</p>
               <button
-                onClick={() => nav('/create')}
+                onClick={() => nav('/canvas')}
                 className="mt-4 rounded-full brand-gradient px-5 py-2 text-[13px] font-medium text-white shadow-lg shadow-brand-600/25 transition hover:brightness-110"
               >
                 Bắt đầu sáng tạo
