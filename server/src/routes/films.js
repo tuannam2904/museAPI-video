@@ -6,7 +6,7 @@ import { requireAuth } from '../auth.js';
 import { MEDIA_DIR } from '../config.js';
 import { db, uid, now, createJob, getJob, updateJob, addCredits, priceOf } from '../db.js';
 import * as muse from '../muse.js';
-import { normalizeRefs } from './generate.js';
+import { normalizeRefs, checkUserLimits } from './generate.js';
 import { chatWithPromptWriter } from '../lib/promptWriter.js';
 
 const r = Router();
@@ -277,6 +277,8 @@ async function createSceneImage(userId, scene, aspect) {
   const cost = priceOf('image', params);
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
   if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo ảnh cần ${cost})`);
+  const limitErr = checkUserLimits(userId, cost);
+  if (limitErr) throw new Error(limitErr);
   const job = createJob(userId, 'image', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo ảnh cảnh', job.id);
   try {
@@ -308,6 +310,8 @@ async function createSceneVideo(userId, project, scene) {
   const cost = priceOf('video', params);
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
   if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo video cần ${cost})`);
+  const limitErr = checkUserLimits(userId, cost);
+  if (limitErr) throw new Error(limitErr);
   const job = createJob(userId, 'video', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo video cảnh', job.id);
   try {
@@ -588,6 +592,8 @@ r.post('/films/:id/characters/:charId/portrait', requireAuth, async (req, res) =
   const cost = priceOf('image', params);
   const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
   if (!user || user.credits < cost) return res.status(502).json({ error: `Không đủ điểm (tạo chân dung cần ${cost})` });
+  const limitErr = checkUserLimits(req.user.id, cost);
+  if (limitErr) return res.status(400).json({ error: limitErr });
   const job = createJob(req.user.id, 'image', prompt, params, cost);
   addCredits(req.user.id, -cost, 'Film: tạo chân dung nhân vật', job.id);
   try {

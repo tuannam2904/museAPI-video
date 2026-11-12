@@ -82,6 +82,35 @@ r.post('/upload', requireAuth, upload.array('files', 10), (req, res) => {
 });
 
 /* ------------------------------ 视频 ------------------------------ */
+
+/* Hạn mức từng user: số tác vụ chạy cùng lúc + điểm tiêu mỗi ngày.
+ * Trả về thông báo lỗi (tiếng Việt) nếu vi phạm, null nếu được phép.
+ * Gọi sau bước kiểm tra số dư và trước khi tạo job / trừ điểm, để yêu cầu
+ * bị từ chối không tốn điểm và không tạo job. */
+export function checkUserLimits(userId, cost) {
+  const u = db.prepare('SELECT daily_credit_cap, max_concurrent_jobs FROM users WHERE id = ?').get(userId);
+  if (!u) return null;
+  if (u.max_concurrent_jobs != null) {
+    const running = db.prepare(
+      "SELECT COUNT(*) n FROM jobs WHERE user_id = ? AND status IN ('queued','processing')"
+    ).get(userId).n;
+    if (running >= u.max_concurrent_jobs) {
+      return 'Bạn đang có quá nhiều tác vụ đang chạy, hãy chờ tác vụ hiện tại xong rồi tạo tiếp';
+    }
+  }
+  if (u.daily_credit_cap != null) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const spent = db.prepare(
+      'SELECT COALESCE(-SUM(delta),0) n FROM ledger WHERE user_id = ? AND delta < 0 AND created_at >= ?'
+    ).get(userId, today.getTime()).n;
+    if (spent + cost > u.daily_credit_cap) {
+      return 'Bạn đã dùng hết hạn mức điểm hôm nay';
+    }
+  }
+  return null;
+}
+
 r.post('/videos', requireAuth, async (req, res) => {
   const { prompt, duration = 5, size = '16:9', images = [], model = 'muse-video', extra = null } = req.body || {};
   if (!prompt || String(prompt).trim().length < 2) {
@@ -95,6 +124,9 @@ r.post('/videos', requireAuth, async (req, res) => {
   if (fresh.credits < cost) {
     return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
   }
+
+  const limitErr = checkUserLimits(req.user.id, cost);
+  if (limitErr) return res.status(400).json({ error: limitErr });
 
   const job = createJob(req.user.id, 'video', String(prompt).trim(), params, cost);
   addCredits(req.user.id, -cost, 'Tạo tác vụ video', job.id);
@@ -136,6 +168,9 @@ r.post('/images', requireAuth, async (req, res) => {
   if (fresh.credits < cost) {
     return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
   }
+
+  const limitErr = checkUserLimits(req.user.id, cost);
+  if (limitErr) return res.status(400).json({ error: limitErr });
 
   const job = createJob(req.user.id, 'image', String(prompt).trim(), params, cost);
   addCredits(req.user.id, -cost, 'Tạo tác vụ hình ảnh', job.id);
