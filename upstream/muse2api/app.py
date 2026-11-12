@@ -527,6 +527,7 @@ class ChatRequest(BaseModel):
     timeout: int | None = None
     prompt: str | None = None       # 兼容把 prompt 直接放顶层的客户端
     images: list | None = None      # 参考图片（data URL / URL / 本地路径），附加到对话中让助手看图
+    account_id: str | None = None  # 指定用哪个上游账号（平台的 prompt-writer）；为空则轮转
     # 下面这些声明出来只是为了「能读到」，muse.ai 端不做对应处理
     tools: list | None = None
     tool_choice: object | None = None
@@ -1585,7 +1586,11 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
 
     model = resolve_model(req.model, default="muse-spark")
     timeout = int(req.timeout or CFG.chat_timeout)
-    acc = store.pick_account(rotate=True)
+    acc = None
+    if req.account_id:
+        acc = store.pick_account(preferred_id=req.account_id, rotate=False)
+    if not acc:
+        acc = store.pick_account(rotate=True)
     if not acc:
         raise HTTPException(400, "Không có tài khoản khả dụng, hãy nhập cookie ở trang quản lý trước")
 
