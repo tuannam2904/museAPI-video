@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Search, Copy, Check, BookOpen, Image as ImageIcon, Loader2, Plus } from 'lucide-react';
+import { X, Search, Copy, Check, BookOpen, Image as ImageIcon, Loader2, Plus, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api } from '../lib/api.js';
 import { useToast } from './ui.jsx';
@@ -81,25 +81,23 @@ export default function PromptLibrary({ open, onClose, onUse, embedded = false }
               className="h-9 w-full rounded-xl border border-white/[0.07] bg-[#0d111c] pl-9 pr-3 text-[13px] text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
             />
           </div>
-          {/* Mục phân loại: 1 hàng cuộn ngang (không wrap nhiều hàng chiếm chỗ,
-              để danh sách prompt hiện ra ngay bên dưới) */}
-          <div className="flex flex-nowrap gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              onClick={() => setCat('all')}
-              className={clsx('shrink-0 rounded-full px-2.5 py-1 text-[11.5px] transition', cat === 'all' ? 'bg-brand-400/20 text-brand-300 ring-1 ring-brand-400/40' : 'bg-white/[0.04] text-mist-300 hover:bg-white/[0.08]')}
+          {/* Mục phân loại: xổ xuống (dropdown) — hàng cuộn ngang không cuộn
+              được bằng chuột thường, dropdown thì bấm là chọn */}
+          <div className="relative">
+            <select
+              value={cat}
+              onChange={(e) => setCat(e.target.value)}
+              aria-label="Lọc theo phân loại"
+              className="h-9 w-full appearance-none rounded-xl border border-white/[0.07] bg-[#0d111c] pl-3 pr-9 text-[13px] text-mist-100 outline-none focus:border-brand-400/50"
             >
-              Tất cả ({prompts?.length || 0})
-            </button>
-            {categories.map(([name, n]) => (
-              <button
-                key={name}
-                onClick={() => setCat(name)}
-                title={name}
-                className={clsx('max-w-[180px] shrink-0 truncate rounded-full px-2.5 py-1 text-[11.5px] transition', cat === name ? 'bg-brand-400/20 text-brand-300 ring-1 ring-brand-400/40' : 'bg-white/[0.04] text-mist-300 hover:bg-white/[0.08]')}
-              >
-                {shortCat(name)} ({n})
-              </button>
-            ))}
+              <option value="all">Tất cả ({prompts?.length || 0})</option>
+              {categories.map(([name, n]) => (
+                <option key={name} value={name}>
+                  {shortCat(name)} ({n})
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-mist-400" />
           </div>
         </div>
 
