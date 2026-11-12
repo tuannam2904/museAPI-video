@@ -232,8 +232,33 @@ try {
   db.exec('ALTER TABLE users ADD COLUMN invited_by TEXT');
 } catch { /* 已存在 */ }
 
+// Hạn mức riêng từng user (để admin quản lý nhiều người dùng)
+for (const col of ['daily_credit_cap INTEGER', 'max_concurrent_jobs INTEGER', 'media_max_mb INTEGER']) {
+  try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* đã có */ }
+}
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id         TEXT PRIMARY KEY,
+  admin_id   TEXT NOT NULL,
+  action     TEXT NOT NULL,
+  target_type TEXT,
+  target_id  TEXT,
+  detail     TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON admin_audit(created_at DESC);
+`);
+
 export const uid = (p = '') => p + crypto.randomBytes(9).toString('hex');
 export const now = () => Date.now();
+
+/* ------------------------------ nhật ký quản trị ------------------------------ */
+export function auditLog(adminId, action, targetType, targetId, detail) {
+  db.prepare(
+    'INSERT INTO admin_audit(id, admin_id, action, target_type, target_id, detail, created_at) VALUES(?,?,?,?,?,?,?)'
+  ).run(uid('audit_'), adminId, action, targetType ?? null, targetId ?? null, detail ?? null, now());
+}
 
 /* ------------------------------- settings ------------------------------- */
 const DEFAULT_SETTINGS = {

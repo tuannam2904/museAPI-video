@@ -28,6 +28,13 @@ export function mediaGlobalMaxMB() {
   return Math.max(0, Number(getSetting('mediaGlobalMaxMB') || 5120));
 }
 
+/* Hạn mức media của riêng một user (cột media_max_mb); null thì dùng mức chung. */
+function mediaMaxMBForUser(userId) {
+  const row = db.prepare('SELECT media_max_mb FROM users WHERE id = ?').get(userId);
+  if (row && row.media_max_mb != null) return Math.max(0, Number(row.media_max_mb));
+  return mediaMaxMB();
+}
+
 /* Đọc toàn bộ file trong thư mục media. */
 function readMediaDir() {
   const entries = [];
@@ -138,7 +145,6 @@ function deleteFile(name) {
 }
 
 export function cleanupMedia() {
-  const maxBytes = mediaMaxMB() * MB;
   const cutoff = Date.now() - mediaRetentionDays() * 86400 * 1000;
   const owners = fileOwners();
   const entries = readMediaDir();
@@ -176,11 +182,13 @@ export function cleanupMedia() {
     perUser.get(uid).push(e);
   }
   const still = [...remaining]; // file còn sống sau bước 2, để bước 3 dùng
-  for (const [, list] of perUser) {
+  for (const [uid, list] of perUser) {
+    // Hạn mức của riêng user này (cột media_max_mb), null thì dùng mức chung.
+    const capBytes = mediaMaxMBForUser(uid) * MB;
     let bytes = list.reduce((s, e) => s + e.size, 0);
     list.sort((a, b) => a.mtime - b.mtime);
     for (const e of list) {
-      if (bytes <= maxBytes) break;
+      if (bytes <= capBytes) break;
       if (remove(e, 'over-limit')) {
         bytes -= e.size;
         const i = still.indexOf(e);
