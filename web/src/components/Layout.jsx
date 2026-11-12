@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Sparkles, Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film, Layers } from 'lucide-react';
+import { Sparkles, Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film, Layers, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../store/auth.jsx';
 
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/create', label: 'Tạo nhanh', icon: Sparkles },
   { to: '/canvas', label: 'Canvas vô hạn', icon: Workflow },
   { to: '/batch-video', label: 'Video hàng loạt', icon: Layers },
+  { to: '/characters', label: 'Nhân vật', icon: Users },
   { to: '/film-studio', label: 'Film Studio', icon: Clapperboard },
   { to: '/works', label: 'Tác phẩm', icon: Film },
   { to: '/accounts', label: 'Nhập Muse', icon: KeyRound },
