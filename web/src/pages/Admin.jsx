@@ -7,11 +7,13 @@ import {
 import { clsx } from 'clsx';
 import { api, fmtAgo, fmtTime } from '../lib/api.js';
 import { useAuth } from '../store/auth.jsx';
-import { Badge, Button, Field, Input, Select, useToast, Spinner, Empty } from '../components/ui.jsx';
+import { Badge, Button, Drawer, Field, Input, Select, useToast, Spinner, Empty } from '../components/ui.jsx';
 
 const TABS = [
   ['overview', 'Tổng quan', Cpu],
   ['users', 'Người dùng', Users],
+  ['ledger', 'Lịch sử điểm', Wallet],
+  ['audit', 'Nhật ký', ShieldCheck],
   ['orders', 'Đơn hàng', Wallet],
   ['posts', 'Cộng đồng', MessageSquare],
   ['settings', 'Cài đặt', Settings2],
@@ -38,6 +40,8 @@ export default function Admin() {
 
       {tab === 'overview' && <Overview />}
       {tab === 'users' && <UsersPanel />}
+      {tab === 'ledger' && <LedgerPanel />}
+      {tab === 'audit' && <AuditPanel />}
       {tab === 'orders' && <OrdersPanel />}
       {tab === 'posts' && <PostsPanel />}
       {tab === 'settings' && <SettingsPanel />}
@@ -246,24 +250,28 @@ function UsersPanel() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sort, setSort] = useState('createdAt');
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', name: '', role: 'user' });
   const [creating, setCreating] = useState(false);
+  const [detailId, setDetailId] = useState(null);
 
-  const load = useCallback(async (query) => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const out = await api.adminUsers(query);
+      const out = await api.adminUsers({ q, role: roleFilter, status: statusFilter, sort });
       setUsers(out.users);
     } catch (e) {
       toast(e.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, q, roleFilter, statusFilter, sort]);
 
-  useEffect(() => { load(''); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const patch = async (id, body, msg) => {
     try {
@@ -302,18 +310,34 @@ function UsersPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && load(q)}
+            onKeyDown={(e) => e.key === 'Enter' && load()}
             placeholder="Tìm email…"
             className="pl-9"
           />
         </div>
-        <Button variant="outline" size="md" onClick={() => load(q)} loading={loading}>Tìm</Button>
+        <Button variant="outline" size="md" onClick={() => load()} loading={loading}>Tìm</Button>
+        <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="w-[150px]">
+          <option value="">Tất cả vai trò</option>
+          <option value="user">Người dùng</option>
+          <option value="admin">Quản trị viên</option>
+        </Select>
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-[150px]">
+          <option value="">Tất cả trạng thái</option>
+          <option value="active">Bình thường</option>
+          <option value="banned">Đã cấm</option>
+        </Select>
+        <Select value={sort} onChange={(e) => setSort(e.target.value)} className="w-[170px]">
+          <option value="createdAt">Mới nhất</option>
+          <option value="creditsSpent">Tiêu nhiều nhất</option>
+          <option value="jobs">Nhiều tác vụ nhất</option>
+          <option value="mediaMB">Media nhiều nhất</option>
+        </Select>
         <Button size="md" onClick={() => setCreateOpen((v) => !v)}>
           <UserPlus size={14} /> Tạo user mới
         </Button>
@@ -355,16 +379,26 @@ function UsersPanel() {
                 <th className="px-3 py-2.5 font-medium">Vai trò</th>
                 <th className="px-3 py-2.5 font-medium">Trạng thái</th>
                 <th className="px-3 py-2.5 text-right font-medium">Điểm</th>
+                <th className="px-3 py-2.5 text-right font-medium">Video</th>
+                <th className="px-3 py-2.5 text-right font-medium">Ảnh</th>
+                <th className="px-3 py-2.5 text-right font-medium">Đã tiêu</th>
+                <th className="px-3 py-2.5 text-right font-medium">Media</th>
+                <th className="px-3 py-2.5 font-medium">Hoạt động cuối</th>
+                <th className="px-3 py-2.5 text-right font-medium">TK Muse</th>
                 <th className="px-3 py-2.5 font-medium">Đăng ký</th>
                 <th className="px-4 py-2.5 text-right font-medium">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-800">
-              {users.map((u) => (
+              {users.map((u) => {
+                const st = u.stats || {};
+                return (
                 <tr key={u.id} className="hover:bg-ink-800/40">
                   <td className="px-4 py-2.5">
-                    <p className="font-medium text-mist-200">{u.name}</p>
-                    <p className="text-[11px] text-ink-500">{u.email}</p>
+                    <button onClick={() => setDetailId(u.id)} className="block text-left" title="Xem chi tiết">
+                      <p className="font-medium text-mist-200 hover:text-brand-300">{u.name}</p>
+                      <p className="text-[11px] text-ink-500 hover:text-brand-300/70">{u.email}</p>
+                    </button>
                   </td>
                   <td className="px-3 py-2.5">
                     <Badge tone={u.role === 'admin' ? 'brand' : 'neutral'}>{u.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}</Badge>
@@ -373,6 +407,15 @@ function UsersPanel() {
                     <Badge tone={u.status === 'active' ? 'ok' : 'error'}>{u.status === 'active' ? 'Bình thường' : 'Đã cấm'}</Badge>
                   </td>
                   <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-amber-300">{u.credits}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{st.videos ?? 0}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{st.images ?? 0}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-rose-300">{st.creditsSpent ?? 0}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-mist-300">
+                    {st.mediaMB != null ? `${st.mediaMB} MB` : '—'}
+                    {st.mediaFiles ? <span className="text-ink-500"> · {st.mediaFiles} file</span> : ''}
+                  </td>
+                  <td className="px-3 py-2.5 text-[11px] text-ink-500">{st.lastActive ? fmtAgo(st.lastActive) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{st.accounts ?? 0}</td>
                   <td className="px-3 py-2.5 text-[11px] text-ink-500">{fmtTime(u.createdAt)}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-1">
@@ -406,11 +449,465 @@ function UsersPanel() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
         {users.length === 0 && !loading && <Empty icon={Users} title="Chưa có người dùng" />}
+      </div>
+
+      {detailId && (
+        <UserDetailDrawer
+          userId={detailId}
+          me={me}
+          onClose={() => setDetailId(null)}
+          onDeleted={() => { setDetailId(null); load(); }}
+          onChanged={() => load()}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------- Chi tiết người dùng ------------------------------- */
+function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
+  const toast = useToast();
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [dtab, setDtab] = useState('jobs');
+  const [pw, setPw] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwResult, setPwResult] = useState('');
+  const [limits, setLimits] = useState({ daily_credit_cap: '', max_concurrent_jobs: '', media_max_mb: '' });
+  const [limitsBusy, setLimitsBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadDetail = useCallback(async () => {
+    setLoading(true);
+    try {
+      const out = await api.adminUserDetail(userId);
+      setDetail(out);
+      const lim = out.user?.limits || {};
+      setLimits({
+        daily_credit_cap: lim.daily_credit_cap ?? '',
+        max_concurrent_jobs: lim.max_concurrent_jobs ?? '',
+        media_max_mb: lim.media_max_mb ?? '',
+      });
+    } catch (e) {
+      toast(e.message, 'error');
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, toast, onClose]);
+
+  useEffect(() => { loadDetail(); }, [loadDetail]);
+
+  const copyPw = async () => {
+    try {
+      await navigator.clipboard.writeText(pwResult);
+      toast('Đã sao chép mật khẩu', 'ok');
+    } catch {
+      toast('Sao chép thất bại, hãy chọn thủ công', 'error');
+    }
+  };
+
+  const resetPw = async () => {
+    if (pw && pw.length < 6) return toast('Mật khẩu ít nhất 6 ký tự', 'error');
+    setPwBusy(true);
+    setPwResult('');
+    try {
+      const out = await api.adminResetPassword(userId, pw || undefined);
+      setPwResult(out.password || '');
+      setPw('');
+      toast('Đã đặt lại mật khẩu', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
+  const saveLimits = async () => {
+    const body = {};
+    for (const k of ['daily_credit_cap', 'max_concurrent_jobs', 'media_max_mb']) {
+      const v = limits[k];
+      body[k] = v === '' || v === null || v === undefined ? null : Number(v);
+    }
+    if (Object.values(body).some((v) => v !== null && (!Number.isFinite(v) || v < 0))) {
+      return toast('Hạn mức phải là số ≥ 0', 'error');
+    }
+    setLimitsBusy(true);
+    try {
+      await api.adminSetLimits(userId, body);
+      toast('Đã lưu hạn mức', 'ok');
+      onChanged?.();
+      loadDetail();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setLimitsBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    const u = detail?.user;
+    if (!confirm(`Xóa user «${u?.email}»? Toàn bộ tác vụ, lịch sử điểm, tài khoản Muse, phim và media của user này sẽ bị xóa.`)) return;
+    setDeleting(true);
+    try {
+      await api.adminDeleteUser(userId);
+      toast('Đã xóa user', 'ok');
+      onDeleted();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const u = detail?.user;
+  const st = detail?.stats || u?.stats || {};
+  const jobs = detail?.jobs || [];
+  const ledger = detail?.ledger || [];
+  const accounts = detail?.accounts || [];
+  const films = detail?.films || [];
+  const media = detail?.media || {};
+
+  const jobStatus = (s) => (s === 'completed' ? ['ok', 'Xong'] : s === 'failed' ? ['error', 'Thất bại'] : s === 'processing' ? ['warn', 'Đang chạy'] : s === 'canceled' ? ['neutral', 'Đã hủy'] : ['brand', 'Đang chờ']);
+
+  return (
+    <Drawer open onClose={onClose} title={u?.name || u?.email || 'Chi tiết người dùng'} subtitle={u?.email} width="w-[640px]">
+      {loading && !detail ? (
+        <div className="grid place-items-center py-24 text-brand-400"><Spinner size={20} /></div>
+      ) : !u ? (
+        <Empty icon={Users} title="Không tìm thấy người dùng" />
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={u.role === 'admin' ? 'brand' : 'neutral'}>{u.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}</Badge>
+            <Badge tone={u.status === 'active' ? 'ok' : 'error'}>{u.status === 'active' ? 'Bình thường' : 'Đã cấm'}</Badge>
+            <span className="text-[12px] text-mist-400">Điểm: <b className="text-amber-300">{u.credits}</b></span>
+            <span className="text-[12px] text-mist-400">Đăng ký: {fmtTime(u.createdAt)}</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
+              <p className="text-[17px] font-semibold tabular-nums text-white">{st.videos ?? 0}</p>
+              <p className="text-[11px] text-mist-400">Video</p>
+            </div>
+            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
+              <p className="text-[17px] font-semibold tabular-nums text-white">{st.images ?? 0}</p>
+              <p className="text-[11px] text-mist-400">Ảnh</p>
+            </div>
+            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
+              <p className="text-[17px] font-semibold tabular-nums text-rose-300">{st.creditsSpent ?? 0}</p>
+              <p className="text-[11px] text-mist-400">Điểm đã tiêu</p>
+            </div>
+            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
+              <p className="text-[17px] font-semibold tabular-nums text-white">{st.mediaMB ?? 0} MB</p>
+              <p className="text-[11px] text-mist-400">Media · {st.mediaFiles ?? 0} file</p>
+            </div>
+            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
+              <p className="text-[17px] font-semibold tabular-nums text-white">{st.accounts ?? 0}</p>
+              <p className="text-[11px] text-mist-400">TK Muse</p>
+            </div>
+            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
+              <p className="text-[13px] font-semibold text-white">{st.lastActive ? fmtAgo(st.lastActive) : '—'}</p>
+              <p className="text-[11px] text-mist-400">Hoạt động cuối</p>
+            </div>
+          </div>
+
+          {/* Đặt lại mật khẩu */}
+          <div className="card p-4">
+            <h4 className="text-[13px] font-semibold text-mist-200">Đặt lại mật khẩu</h4>
+            <div className="mt-3 flex gap-2">
+              <Input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                placeholder="Mật khẩu mới (để trống = tự tạo)"
+                className="flex-1"
+              />
+              <Button onClick={resetPw} loading={pwBusy}>Đặt lại</Button>
+            </div>
+            {pwResult && (
+              <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+                <p className="text-[11.5px] text-amber-200">Mật khẩu mới — chỉ hiện một lần, hãy gửi cho user ngay:</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="min-w-0 flex-1 break-all rounded-lg bg-black/30 px-3 py-2 font-mono text-[13px] text-white">{pwResult}</code>
+                  <Button variant="outline" size="sm" onClick={copyPw}>Sao chép</Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hạn mức */}
+          <div className="card p-4">
+            <h4 className="text-[13px] font-semibold text-mist-200">Hạn mức riêng</h4>
+            <p className="mt-0.5 text-[11.5px] text-ink-500">Để trống = không giới hạn</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <Field label="Điểm tối đa mỗi ngày">
+                <Input type="number" min="0" value={limits.daily_credit_cap} onChange={(e) => setLimits((l) => ({ ...l, daily_credit_cap: e.target.value }))} placeholder="Không giới hạn" />
+              </Field>
+              <Field label="Tác vụ chạy cùng lúc">
+                <Input type="number" min="0" value={limits.max_concurrent_jobs} onChange={(e) => setLimits((l) => ({ ...l, max_concurrent_jobs: e.target.value }))} placeholder="Không giới hạn" />
+              </Field>
+              <Field label="Media tối đa (MB)">
+                <Input type="number" min="0" value={limits.media_max_mb} onChange={(e) => setLimits((l) => ({ ...l, media_max_mb: e.target.value }))} placeholder="Không giới hạn" />
+              </Field>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button onClick={saveLimits} loading={limitsBusy}><Save size={13} /> Lưu hạn mức</Button>
+            </div>
+          </div>
+
+          {/* 4 tab chi tiết */}
+          <div className="flex gap-1.5 rounded-xl bg-ink-850 p-1 w-fit">
+            {[['jobs', 'Tác vụ'], ['ledger', 'Lịch sử điểm'], ['accounts', 'Tài khoản Muse'], ['media', 'Media & Phim']].map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setDtab(k)}
+                className={clsx(
+                  'rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition',
+                  dtab === k ? 'bg-ink-700 text-white shadow-sm' : 'text-mist-400 hover:text-mist-200'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {dtab === 'jobs' && (
+            <div className="space-y-1.5">
+              {jobs.length === 0 && <p className="py-6 text-center text-[12.5px] text-ink-500">Chưa có tác vụ nào</p>}
+              {jobs.map((j) => {
+                const [tone, label] = jobStatus(j.status);
+                return (
+                  <div key={j.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-900 px-2.5 py-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-mist-300" title={j.prompt}>{j.prompt || '(không có prompt)'}</span>
+                    <Badge tone={j.type === 'video' ? 'brand' : 'neutral'}>{j.type === 'video' ? 'Video' : 'Ảnh'}</Badge>
+                    <Badge tone={tone}>{label}</Badge>
+                    <span className="shrink-0 text-[11px] tabular-nums text-mist-400">{j.cost ?? 0} điểm</span>
+                    <span className="shrink-0 text-[10.5px] text-ink-500">{fmtAgo(j.created_at)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {dtab === 'ledger' && (
+            <div className="space-y-1.5">
+              {ledger.length === 0 && <p className="py-6 text-center text-[12.5px] text-ink-500">Chưa có giao dịch điểm nào</p>}
+              {ledger.map((e) => (
+                <div key={e.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-900 px-2.5 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] text-mist-300">{e.reason}</p>
+                    <p className="text-[10.5px] text-ink-500">{fmtTime(e.created_at)}{e.job_id ? ` · ${e.job_id}` : ''}</p>
+                  </div>
+                  <span className={clsx('shrink-0 font-mono text-[12.5px] font-semibold', e.delta >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                    {e.delta >= 0 ? `+${e.delta}` : e.delta}
+                  </span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-mist-400">Số dư {e.balance_after}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {dtab === 'accounts' && (
+            <div className="space-y-1.5">
+              {accounts.length === 0 && <p className="py-6 text-center text-[12.5px] text-ink-500">Chưa nhập tài khoản Muse nào</p>}
+              {accounts.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-900 px-2.5 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-medium text-mist-200">{a.label}</p>
+                    <p className="font-mono text-[10.5px] text-ink-500">{a.upstream_id ? `#${a.upstream_id.slice(0, 8)}` : ''}</p>
+                  </div>
+                  <Badge tone={a.status === 'ok' ? 'ok' : a.status === 'error' ? 'error' : 'warn'}>
+                    {a.status === 'ok' ? 'Khả dụng' : a.status === 'error' ? 'Lỗi' : 'Chờ kiểm tra'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {dtab === 'media' && (
+            <div className="space-y-3">
+              <p className="rounded-lg bg-ink-900 px-3 py-2 text-[12.5px] text-mist-300">
+                Media: <b className="text-white">{media.totalMB ?? st.mediaMB ?? 0} MB</b> · {media.files ?? st.mediaFiles ?? 0} file
+              </p>
+              {films.length === 0 ? (
+                <p className="py-4 text-center text-[12.5px] text-ink-500">Chưa có phim nào</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {films.map((f) => (
+                    <div key={f.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-900 px-2.5 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-medium text-mist-200">{f.title}</p>
+                        <p className="text-[10.5px] text-ink-500">{f.genre || ''}{f.duration_total ? ` · ${f.duration_total}s` : ''} · {f.status || ''}</p>
+                      </div>
+                      <span className="shrink-0 text-[10.5px] text-ink-500">{fmtAgo(f.created_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="border-t border-ink-700 pt-4">
+            <Button
+              variant="outline"
+              onClick={remove}
+              loading={deleting}
+              disabled={u.id === me?.id}
+              className="w-full border-rose-500/40 text-rose-300 hover:border-rose-500/70"
+            >
+              <Trash2 size={13} /> Xóa user này (xóa cả tác vụ, lịch sử điểm, tài khoản Muse, phim và media)
+            </Button>
+            {u.id === me?.id && <p className="mt-2 text-center text-[11px] text-ink-500">Không thể xóa chính mình</p>}
+          </div>
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
+/* ------------------------------- Lịch sử điểm ------------------------------- */
+function LedgerPanel() {
+  const toast = useToast();
+  const [entries, setEntries] = useState([]);
+  const [userFilter, setUserFilter] = useState('');
+  const [reasonFilter, setReasonFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = { limit: 100 };
+      if (userFilter.trim()) params.user_id = userFilter.trim();
+      if (reasonFilter.trim()) params.reason = reasonFilter.trim();
+      const out = await api.adminLedger(params);
+      setEntries(out.entries || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast, userFilter, reasonFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={userFilter}
+          onChange={(e) => setUserFilter(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && load()}
+          placeholder="Lọc theo email hoặc ID user…"
+          className="max-w-xs"
+        />
+        <Input
+          value={reasonFilter}
+          onChange={(e) => setReasonFilter(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && load()}
+          placeholder="Lọc theo lý do…"
+          className="max-w-xs"
+        />
+        <Button variant="outline" size="md" onClick={() => load()} loading={loading}>Tìm</Button>
+      </div>
+
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12.5px]">
+            <thead className="border-b border-ink-700 text-[11px] uppercase tracking-wide text-ink-500">
+              <tr>
+                <th className="px-4 py-2.5 font-medium">Người dùng</th>
+                <th className="px-3 py-2.5 text-right font-medium">Thay đổi</th>
+                <th className="px-3 py-2.5 text-right font-medium">Số dư sau</th>
+                <th className="px-3 py-2.5 font-medium">Lý do</th>
+                <th className="px-3 py-2.5 font-medium">Tác vụ</th>
+                <th className="px-4 py-2.5 font-medium">Thời gian</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-800">
+              {entries.map((e) => (
+                <tr key={e.id} className="hover:bg-ink-800/40">
+                  <td className="px-4 py-2.5 text-[11.5px] text-mist-300">{e.email || e.user_id}</td>
+                  <td className={clsx('px-3 py-2.5 text-right font-mono font-semibold', e.delta >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                    {e.delta >= 0 ? `+${e.delta}` : e.delta}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{e.balance_after}</td>
+                  <td className="px-3 py-2.5 text-mist-300">{e.reason}</td>
+                  <td className="px-3 py-2.5 font-mono text-[11px] text-ink-500">{e.job_id || '—'}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-ink-500">{fmtTime(e.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {entries.length === 0 && !loading && <Empty icon={Wallet} title="Chưa có giao dịch điểm nào" />}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------- Nhật ký quản trị ------------------------------- */
+function AuditPanel() {
+  const toast = useToast();
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const out = await api.adminAudit(100);
+      setEntries(out.entries || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="md" onClick={() => load()} loading={loading}>
+          <RefreshCw size={12} /> Làm mới
+        </Button>
+      </div>
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12.5px]">
+            <thead className="border-b border-ink-700 text-[11px] uppercase tracking-wide text-ink-500">
+              <tr>
+                <th className="px-4 py-2.5 font-medium">Quản trị viên</th>
+                <th className="px-3 py-2.5 font-medium">Hành động</th>
+                <th className="px-3 py-2.5 font-medium">Đối tượng</th>
+                <th className="px-3 py-2.5 font-medium">Chi tiết</th>
+                <th className="px-4 py-2.5 font-medium">Thời gian</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-800">
+              {entries.map((e) => (
+                <tr key={e.id} className="hover:bg-ink-800/40">
+                  <td className="px-4 py-2.5 text-[11.5px] text-mist-300">{e.admin_email}</td>
+                  <td className="px-3 py-2.5"><Badge tone="brand">{e.action}</Badge></td>
+                  <td className="px-3 py-2.5 text-[11.5px] text-mist-300">
+                    {e.target_type}
+                    {e.target_id ? <span className="font-mono text-[11px] text-ink-500"> · {String(e.target_id).slice(0, 12)}</span> : ''}
+                  </td>
+                  <td className="px-3 py-2.5 text-mist-300">{e.detail || '—'}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-ink-500">{fmtTime(e.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {entries.length === 0 && !loading && <Empty icon={ShieldCheck} title="Chưa có hoạt động quản trị nào" />}
       </div>
     </div>
   );
