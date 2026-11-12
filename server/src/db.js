@@ -116,6 +116,17 @@ CREATE TABLE IF NOT EXISTS film_scenes (
 );
 CREATE INDEX IF NOT EXISTS idx_film_scenes_proj ON film_scenes(project_id, sort_order);
 
+CREATE TABLE IF NOT EXISTS film_characters (
+  id           TEXT PRIMARY KEY,
+  project_id   TEXT NOT NULL,
+  name         TEXT NOT NULL DEFAULT '',
+  description  TEXT NOT NULL DEFAULT '',
+  photos       TEXT NOT NULL DEFAULT '[]',
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_film_chars_proj ON film_characters(project_id, created_at);
+
 CREATE TABLE IF NOT EXISTS uploads (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,
