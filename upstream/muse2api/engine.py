@@ -1688,7 +1688,7 @@ class MuseEngine:
                 "(function(){"
                 "var btns=Array.from(document.querySelectorAll('button[aria-label]')).filter(function(b){"
                 "var al=b.getAttribute('aria-label')||'';"
-                "return /remove\\s*attachment|移除附件|删除附件|移除|删除/i.test(al);"
+                "return /remove\\s*attachment|移除附件|删除附件|移除|删除|gỡ\\s*(file\\s*)?đính kèm|xóa\\s*(file\\s*)?đính kèm/i.test(al);"
                 "});"
                 "btns.forEach(function(b){b.click();});"
                 "Array.from(document.querySelectorAll('input[type=\"file\"]')).forEach(function(inp){inp.value='';});"
@@ -1727,7 +1727,7 @@ class MuseEngine:
     })()"""
 
     _ATTACHED_COUNT_JS = "(function(){" + _COMPOSER_ROOTS_JS + """
-        var rx = /remove\\s*attachment|移除附件|删除附件/i;
+        var rx = /remove\\s*attachment|移除附件|删除附件|gỡ\\s*(file\\s*)?đính kèm|xóa\\s*(file\\s*)?đính kèm/i;
         var bubble = '[class*=chat-user-bubble], [class*="group/msg"], [class*=hatch-chat-groupable-bubble]';
         var roots = __composerRoots();
         for (var r of roots) {
