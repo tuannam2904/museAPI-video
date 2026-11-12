@@ -3,6 +3,7 @@ import { requireAuth } from '../auth.js';
 import {
   listAccounts as localAccounts, upsertAccount, deleteAccountRow, db, now,
   createBindCode, getBindCode, finishBindCode, failBindCode,
+  getSetting, setSetting,
 } from '../db.js';
 import * as muse from '../muse.js';
 
@@ -160,6 +161,7 @@ r.get('/', requireAuth, async (req, res) => {
   const upMap = new Map(upstream.map((a) => [a.id, a]));
   const local = localAccounts(req.user.role === 'admin' ? null : req.user.id);
   const counts = jobCountsByAccount();
+  const promptWriterId = getSetting('prompt_writer_account_id') || null;
 
   const accounts = local.map((a) => {
     const up = a.upstream_id ? upMap.get(a.upstream_id) : null;
@@ -173,6 +175,7 @@ r.get('/', requireAuth, async (req, res) => {
       label: a.label,
       mine: a.owner_id === req.user.id,
       shared: a.owner_id === null,
+      isPromptWriter: a.id === promptWriterId,
       status: up ? (up.ok === true ? 'ok' : up.ok === false ? 'error' : 'unknown') : 'missing',
       note: up?.note || a.note || null,
       expiresAt: up?.expires_at ?? a.expires_at,
@@ -285,6 +288,24 @@ r.patch('/:id/proxy', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
+});
+
+/* Chọn tài khoản này làm prompt-writer: mọi lần viết prompt (chat, kịch bản
+ * và chia cảnh Film Studio) đều dùng riêng tài khoản này, không xoay vòng
+ * qua các tài khoản tạo video. */
+r.post('/:id/prompt-writer', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
+  setSetting('prompt_writer_account_id', row.id);
+  res.json({ ok: true });
+});
+
+/* Bỏ chọn prompt-writer (chỉ xóa khi tài khoản này đang là prompt-writer). */
+r.delete('/:id/prompt-writer', requireAuth, (req, res) => {
+  if (getSetting('prompt_writer_account_id') === req.params.id) {
+    db.prepare('DELETE FROM settings WHERE key = ?').run('prompt_writer_account_id');
+  }
+  res.json({ ok: true });
 });
 
 r.post('/:id/test', requireAuth, async (req, res) => {

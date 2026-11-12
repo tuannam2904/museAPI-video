@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { requireAuth } from '../auth.js';
-import { CFG, MEDIA_DIR } from '../config.js';
+import { MEDIA_DIR } from '../config.js';
 import { db, uid, now, createJob, getJob, updateJob, addCredits, priceOf } from '../db.js';
 import * as muse from '../muse.js';
 import { normalizeRefs } from './generate.js';
+import { chatWithPromptWriter } from '../lib/promptWriter.js';
 
 const r = Router();
 
@@ -117,31 +118,13 @@ function syncSceneFromJob(scene) {
 }
 
 async function chatText(system, user, timeoutMs = 600_000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const up = await fetch(`${CFG.museBase}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${CFG.museKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'muse-spark',
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-    const data = await up.json().catch(() => ({}));
-    if (!up.ok) throw new Error(data?.error?.message || data?.detail || `Lỗi HTTP ${up.status} từ upstream`);
-    return data?.choices?.[0]?.message?.content ?? '';
-  } finally {
-    clearTimeout(timer);
-  }
+  return chatWithPromptWriter({
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    timeoutMs,
+  });
 }
 
 function parseJsonArray(text) {

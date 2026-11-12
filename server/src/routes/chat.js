@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth.js';
-import { CFG } from '../config.js';
+import { chatWithPromptWriter } from '../lib/promptWriter.js';
 
 const r = Router();
 
@@ -20,34 +20,11 @@ r.post('/chat', requireAuth, async (req, res) => {
     .slice(-20)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
-
   try {
-    const up = await fetch(`${CFG.museBase}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${CFG.museKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model, messages: clean, stream: false }),
-      signal: controller.signal,
-    });
-
-    const text = await up.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-    if (!up.ok) {
-      return res.status(up.status).json({ error: data?.error?.message || data?.detail || `Lỗi HTTP ${up.status} từ upstream` });
-    }
-
-    const content = data?.choices?.[0]?.message?.content ?? '';
-    res.json({ content, model, usage: data?.usage || null });
+    const content = await chatWithPromptWriter({ messages: clean, model });
+    res.json({ content, model, usage: null });
   } catch (e) {
     res.status(502).json({ error: `Yêu cầu gặp lỗi：${e.message}` });
-  } finally {
-    clearTimeout(timer);
   }
 });
 
