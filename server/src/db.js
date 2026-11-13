@@ -170,6 +170,23 @@ CREATE TABLE IF NOT EXISTS memberships (
   expires_at INTEGER NOT NULL
 );
 
+/* Đơn mua VIP qua SePay (VietQR + chuyển khoản MB): một đơn = một gói ngày/tuần/tháng */
+CREATE TABLE IF NOT EXISTS vip_orders (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  code          TEXT NOT NULL UNIQUE,   -- mã chuyển khoản, VD VIP123456
+  amount_vnd    INTEGER NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending', -- pending|paid|expired|underpaid|canceled
+  duration_days INTEGER NOT NULL DEFAULT 30,
+  created_at    INTEGER NOT NULL,
+  expires_at    INTEGER NOT NULL,       -- hạn thanh toán (TTL)
+  paid_at       INTEGER,
+  payment_id    INTEGER,                -- id giao dịch bên Worker/D1
+  note          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_vip_orders_user ON vip_orders(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vip_orders_code ON vip_orders(code);
+
 CREATE TABLE IF NOT EXISTS posts (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,
@@ -237,6 +254,10 @@ for (const col of ['daily_credit_cap INTEGER', 'max_concurrent_jobs INTEGER', 'm
   try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* đã có */ }
 }
 
+// VIP: tài khoản Muse nào là VIP (admin đánh dấu) + user nào đang có quyền VIP (hết hạn khi nào)
+try { db.exec('ALTER TABLE accounts ADD COLUMN vip INTEGER NOT NULL DEFAULT 0'); } catch { /* đã có */ }
+try { db.exec('ALTER TABLE users ADD COLUMN vip_expires_at INTEGER'); } catch { /* đã có */ }
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS admin_audit (
   id         TEXT PRIMARY KEY,
@@ -275,6 +296,21 @@ const DEFAULT_SETTINGS = {
   mediaGlobalMaxMB: '5120',
   // Giữ file media bao nhiêu ngày rồi tự xóa.
   mediaRetentionDays: '7',
+  // VIP: giá 3 gói (ngày/tuần/tháng, VND). Thời hạn gói là cố định: ngày=1, tuần=7, tháng=30.
+  vipPriceDayVnd: '9000',
+  vipPriceWeekVnd: '49000',
+  vipPriceMonthVnd: '99000',
+  // SePay (VietQR + chuyển khoản MB): Worker nhận webhook rồi cho platform poll.
+  sepayMailApiUrl: '',
+  sepayMailApiToken: '',
+  sepayMbAccountNo: '1136226868',
+  sepayMbAccountName: 'NGUYEN TUAN NAM',
+  sepayMbBin: '970422',
+  sepayCodePrefix: 'VIP',
+  // Con trỏ poll Worker (id giao dịch lớn nhất đã thấy) + chu kỳ poll.
+  vipSePaySince: '0',
+  vipOrderTtlMin: '10',
+  vipPollSeconds: '15',
 };
 
 export function getSettings() {
@@ -292,6 +328,33 @@ export function setSetting(key, value) {
 
 export function getSetting(key) {
   return getSettings()[key] ?? DEFAULT_SETTINGS[key];
+}
+
+/* --------------------------------- VIP --------------------------------- */
+export function isVip(userId) {
+  const u = db.prepare('SELECT vip_expires_at FROM users WHERE id = ?').get(userId);
+  return !!(u && u.vip_expires_at && u.vip_expires_at > now());
+}
+
+export function vipExpiresAt(userId) {
+  const u = db.prepare('SELECT vip_expires_at FROM users WHERE id = ?').get(userId);
+  return u?.vip_expires_at ?? null;
+}
+
+/* Cộng thêm `days` ngày VIP: nối tiếp từ hạn hiện tại nếu còn hạn, không thì từ bây giờ. */
+export function grantVip(userId, days) {
+  const d = Number(days);
+  if (!Number.isFinite(d) || d <= 0) throw new Error('Số ngày VIP không hợp lệ');
+  const u = db.prepare('SELECT vip_expires_at FROM users WHERE id = ?').get(userId);
+  if (!u) throw new Error('Người dùng không tồn tại');
+  const base = Math.max(now(), u.vip_expires_at || 0);
+  const exp = base + Math.round(d * 86400000);
+  db.prepare('UPDATE users SET vip_expires_at = ? WHERE id = ?').run(exp, userId);
+  return exp;
+}
+
+export function revokeVip(userId) {
+  db.prepare('UPDATE users SET vip_expires_at = NULL WHERE id = ?').run(userId);
 }
 
 /* -------------------------------- ledger -------------------------------- */

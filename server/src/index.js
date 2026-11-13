@@ -20,6 +20,8 @@ import chatRoutes from './routes/chat.js';
 import analyzeRoutes from './routes/analyze.js';
 import promptsRoutes from './routes/prompts.js';
 import filmsRoutes from './routes/films.js';
+import vipRoutes from './routes/vip.js';
+import { vipPollOnce } from './lib/sepay.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -67,6 +69,7 @@ app.use('/api', chatRoutes);
 app.use('/api', analyzeRoutes);
 app.use('/api', promptsRoutes);
 app.use('/api', filmsRoutes);
+app.use('/api/vip', vipRoutes);
 app.use('/api', genRoutes);
 
 // OpenAI 兼容对外接口（用 sk- 密钥鉴权，转发到上游）
@@ -112,6 +115,20 @@ function bootstrap() {
 bootstrap();
 startWorker();
 startMediaCleanup();
+
+/* Poller VIP (SePay): hỏi Worker mỗi N giây để đối chiếu tiền về; lỗi không làm chết server. */
+function startVipPoller() {
+  const secs = Math.max(5, Number(getSettings().vipPollSeconds) || 15);
+  const tick = () => {
+    Promise.resolve()
+      .then(() => vipPollOnce())
+      .then((r) => { if (r?.paid) console.log('[vip] Poll: kích hoạt VIP cho', r.paid, 'đơn'); })
+      .catch((e) => console.warn('[vip] Poll lỗi:', e.message));
+  };
+  setInterval(tick, secs * 1000);
+  console.log(`[server] Poller VIP (SePay) mỗi ${secs}s`);
+}
+startVipPoller();
 
 app.listen(CFG.port, CFG.host, () => {
   console.log(`[server] 平台后端已启动 http://${CFG.host}:${CFG.port}`);
