@@ -685,11 +685,23 @@ r.post('/films/:id/storyboard', requireAuth, async (req, res) => {
   if (!p) return res.status(404).json({ error: 'Không tìm thấy dự án' });
   const script = (p.script || '').trim() || p.idea;
   const sceneCount = Math.max(1, Math.round(p.durationTotal / p.sceneDuration));
+  // Nhân vật tham chiếu của phim (bước 3 Film Studio): đưa vào prompt để Muse
+  // viết image_prompt có nhắc đúng tên + ngoại hình nhân vật, và ghi tên nhân vật
+  // vào trường characters của từng cảnh — tạo ảnh cảnh mới gắn đúng ảnh tham chiếu.
+  const chars = listFilmCharacters(p.id);
+  const charBlock = chars.length
+    ? ['Nhân vật tham chiếu của phim (giữ đúng ngoại hình và trang phục của từng nhân vật xuyên suốt phim):',
+       ...chars.map((c) => `- ${c.name}: ${c.description || 'chưa có mô tả'}`),
+       'Trong image_prompt của mỗi cảnh có nhân vật, phải mô tả ngoại hình và trang phục của nhân vật đó theo đúng mô tả trên; trường characters của cảnh ghi đúng tên nhân vật xuất hiện.',
+      ].join('\n')
+    : '';
   try {
     const system = 'Bạn là đạo diễn phim ngắn. Chỉ trả về DUY NHẤT một mảng JSON, không thêm bất kỳ chữ nào ngoài JSON.';
     const user = [
       `Kịch bản phim (thể loại ${p.genre}, phong cách ${p.style}, tỷ lệ ${p.aspect}):`,
       script,
+      '',
+      charBlock,
       '',
       `Chia kịch bản thành đúng ${sceneCount} cảnh, mỗi cảnh ${p.sceneDuration} giây, theo trình tự câu chuyện.`,
       'Mỗi cảnh là một object JSON với các trường, TẤT CẢ viết bằng tiếng Việt (kể cả image_prompt và video_prompt). QUAN TRỌNG: trong lời thoại KHÔNG dùng dấu ngoặc kép ("), viết thoại không có dấu ngoặc hoặc dùng dấu nháy đơn (\'); mọi chuỗi JSON phải hợp lệ, không được để dấu " không escape trong chuỗi:',
@@ -700,7 +712,7 @@ r.post('/films/:id/storyboard', requireAuth, async (req, res) => {
       '- lighting: ánh sáng',
       '- setting: bối cảnh',
       '- image_prompt: prompt tạo ảnh HOÀN CHỈNH VÀ CHI TIẾT cho cảnh, bao gồm đầy đủ: ngoại hình và trang phục nhân vật (mô tả cụ thể, giữ cố định xuyên suốt phim), bối cảnh, ánh sáng, góc quay, phong cách hình ảnh, hành động trong cảnh',
-      '- video_prompt: prompt tạo video CHI TIẾT, mô tả chuyển động, hành động và diễn biến trong cảnh, kèm góc quay và nhịp độ',
+      '- video_prompt: prompt tạo video CHI TIẾT, mô tả chuyển động, hành động và diễn biến trong cảnh, kèm góc quay và nhịp độ — video_prompt PHẢI bao gồm góc quay và chuyển động camera trong chính nội dung prompt (không để riêng ở trường camera)',
       'Giữ ngoại hình nhân vật, trang phục và bối cảnh nhất quán giữa các cảnh.',
     ].join('\n');
     let arr;
