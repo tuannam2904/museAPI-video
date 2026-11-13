@@ -3,7 +3,7 @@ import { X, Loader2, Clapperboard, Send, Copy, Check } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useToast } from './ui.jsx';
 
-const STORY_SYSTEM = 'Bạn là đạo diễn phân cảnh cho video AI. Người dùng đưa một ý tưởng bằng tiếng Việt. Hãy chia ý tưởng thành N shot theo yêu cầu, trả về DUY NHẤT một mảng JSON, không giải thích, không thêm chữ nào ngoài JSON. Mỗi shot là một object với các trường: shot (số thứ tự, số nguyên), visual (mô tả hình ảnh trong shot, tiếng Việt), camera (chuyển động máy quay, tiếng Việt), duration (số giây, số nguyên), prompt (prompt chi tiết để tạo video cho shot này, tiếng Việt, sinh động và cụ thể), voiceover (lời thoại hoặc phụ đề nếu có, tiếng Việt, có thể là chuỗi rỗng).';
+const STORY_SYSTEM = 'Bạn là đạo diễn phân cảnh cho video AI. Người dùng đưa một ý tưởng bằng tiếng Việt. Hãy chia ý tưởng thành N shot theo yêu cầu, trả về DUY NHẤT một mảng JSON, không giải thích, không thêm chữ nào ngoài JSON. Mỗi shot là một object với các trường: shot (số thứ tự, số nguyên), visual (mô tả hình ảnh trong shot, tiếng Việt), camera (chuyển động máy quay, tiếng Việt), duration (số giây, số nguyên), prompt (prompt chi tiết để tạo video cho shot này, tiếng Việt, sinh động và cụ thể — prompt PHẢI bao gồm cả góc quay và chuyển động camera trong chính nội dung prompt, không để riêng ở trường camera), voiceover (lời thoại hoặc phụ đề nếu có, tiếng Việt, có thể là chuỗi rỗng).';
 
 /* Bảng phân cảnh: gõ một câu ý tưởng → Muse chia thành bảng shot
    (hình ảnh, chuyển động máy, thời lượng, prompt, lời thoại) →
