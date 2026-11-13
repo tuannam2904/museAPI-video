@@ -283,6 +283,11 @@ CREATE TABLE IF NOT EXISTS admin_audit (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON admin_audit(created_at DESC);
+CREATE TABLE IF NOT EXISTS canvas_docs (
+  user_id    TEXT PRIMARY KEY,
+  doc        TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `);
 
 export const uid = (p = '') => p + crypto.randomBytes(9).toString('hex');
