@@ -5,7 +5,7 @@ import {
   createBindCode, getBindCode, finishBindCode, failBindCode, auditLog,
 } from '../db.js';
 import * as muse from '../muse.js';
-import { vipAccountTodayCount, getVipDailyLimit, vipPoolStatus } from '../lib/accounts.js';
+import { vipAccountTodayCount, getVipDailyLimit, vipPoolStatus, canUseVip } from '../lib/accounts.js';
 
 const r = Router();
 
@@ -209,9 +209,14 @@ r.get('/', requireAuth, async (req, res) => {
   // thấy SỐ LƯỢNG acc đang hoạt động (để biết còn acc để tạo video/ảnh).
   let vipPool = { total: 0, active: 0 };
   try { vipPool = await vipPoolStatus(); } catch { vipPool = { total: 0, active: 0 }; }
+  // User VIP/admin dùng được pool acc VIP — tính pool vào số tài khoản khả dụng
+  // để Video hàng loạt (và các chỗ khác dùng summary.usable) không báo
+  // "Chưa kết nối tài khoản" khi user không có acc riêng nhưng có acc VIP.
+  const vipUsable = canUseVip(req.user.id) ? vipPool.active : 0;
+  const vipTotal = canUseVip(req.user.id) ? vipPool.total : 0;
   const summary = {
-    total: alive.length,
-    usable: usable.length,
+    total: alive.length + vipTotal,
+    usable: usable.length + vipUsable,
     // 平均剩余周额度（多账号时即「还能跑几成」的平均值）
     weeklyLeftPct: withPct.length
       ? Math.round(withPct.reduce((s, a) => s + a.quota.weeklyLeftPct, 0) / withPct.length)
