@@ -53,6 +53,25 @@ function canUseVip(userId) {
 }
 
 /**
+ * Trạng thái pool acc VIP do admin cung cấp — chỉ trả SỐ LƯỢNG, không lộ
+ * chi tiết tài khoản (label, quota, proxy) cho user thường.
+ * { total, active }: total = số acc VIP; active = số acc VIP đang hoạt động
+ * (đang bật ở upstream — nếu không đọc được upstream thì bỏ qua điều kiện
+ * này — và chưa hết lượt tạo hôm nay).
+ */
+export async function vipPoolStatus() {
+  const rows = db.prepare('SELECT * FROM accounts WHERE vip = 1 AND upstream_id IS NOT NULL').all();
+  const total = rows.length;
+  const enabled = await upstreamEnabledIds();
+  const limit = getVipDailyLimit();
+  const active = rows.filter((a) => {
+    if (enabled && !enabled.has(a.upstream_id)) return false;
+    return vipAccountTodayCount(a.upstream_id) < limit;
+  }).length;
+  return { total, active };
+}
+
+/**
  * Chọn 1 acc VIP còn lượt hôm nay (ngẫu nhiên để tải chia đều).
  * Trả { upstreamId, platformId, mode: 'vip' } hoặc { error }.
  * `usable` là hàm lọc acc có upstream_id và đang bật (định nghĩa trong pickAccountForUser).
