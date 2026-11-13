@@ -50,7 +50,7 @@ const loadCharacters = () => {
 };
 
 export default function BatchVideo() {
-  const { user, refresh } = useAuth();
+  const { refresh } = useAuth();
   const toast = useToast();
   const confirmDialog = useConfirmDialog();
   const nav = useNavigate();
@@ -96,9 +96,7 @@ export default function BatchVideo() {
   const concurrencyRef = useRef(1);
   const mountedRef = useRef(true);
 
-  const perVideo = 10 + 2 * duration;
   const lineCount = parseLines(lines).length;
-  const totalCost = lineCount * perVideo;
   const concurrency = Math.min(4, Math.max(1, summary?.usable || 1));
   const pendingCount = tasks.filter((t) => t.status === 'pending').length;
   const runningCount = tasks.filter((t) => t.status === 'running').length;
@@ -193,15 +191,10 @@ export default function BatchVideo() {
       refresh();
     } catch (e) {
       updateTask(task.id, { status: 'failed', error: e.message || 'Tạo thất bại', finishedAt: Date.now() });
-      if (e.status === 402 && !useVip) {
-        stopRef.current = true;
-        toast('Không đủ điểm — đã dừng hàng loạt', 'error');
-      } else {
-        // Lỗi từ server (kể cả hết lượt VIP hôm nay) hiện nguyên văn, không thay bằng câu chung.
-        toast(e.message || 'Tạo thất bại', 'error');
-        // Hết lượt VIP hôm nay thì dừng hàng loạt, khỏi thử từng video còn lại.
-        if (useVip && (e.status === 429 || e.status === 403)) stopRef.current = true;
-      }
+      // Lỗi từ server (kể cả hết lượt tạo hôm nay) hiện nguyên văn, không thay bằng câu chung.
+      toast(e.message || 'Tạo thất bại', 'error');
+      // Hết lượt tạo hôm nay (429) thì dừng hàng loạt, khỏi thử từng video còn lại.
+      if (e.status === 429 || (useVip && e.status === 403)) stopRef.current = true;
     }
   };
 
@@ -247,11 +240,6 @@ export default function BatchVideo() {
       return toast('Chưa có tài khoản khả dụng — vào tab Nhập Muse để thêm', 'error');
     }
     if (prompts.length) {
-      const total = prompts.length * perVideo;
-      // Dùng acc VIP thì không tốn điểm — chỉ tính vào giới hạn lượt tạo mỗi ngày của acc VIP.
-      if (!useVip && (user?.credits ?? 0) < total) {
-        return toast(`Không đủ điểm, cần ${total} điểm cho ${prompts.length} video`, 'error');
-      }
       const base = tasksRef.current.length
         ? Math.max(...tasksRef.current.map((t) => t.index)) + 1
         : 1;
@@ -269,7 +257,6 @@ export default function BatchVideo() {
           progress: 0,
           mediaUrl: null,
           error: null,
-          cost: perVideo,
           duration,
           size,
           /* ảnh nhân vật trước, rồi tới ảnh tham chiếu đã tải, tối đa 3 ảnh */
@@ -782,7 +769,7 @@ export default function BatchVideo() {
                 </div>
               </div>
 
-              {/* Chi phí */}
+              {/* Số video sẽ tạo */}
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#0d111c] px-3 py-2.5 text-[12.5px]">
                 {useVip ? (
                   <span className="text-mist-300">
@@ -791,12 +778,9 @@ export default function BatchVideo() {
                   </span>
                 ) : (
                   <span className="text-mist-300">
-                    {lineCount} video × {perVideo} điểm = <b className="text-white">{totalCost} điểm</b>
+                    {lineCount} video
                   </span>
                 )}
-                <span className={clsx(!useVip && lineCount > 0 && (user?.credits ?? 0) < totalCost ? 'font-medium text-rose-300' : 'text-mist-400')}>
-                  Điểm của bạn: {user?.credits ?? '—'}
-                </span>
               </div>
 
               {/* Dùng acc VIP */}
@@ -1043,7 +1027,6 @@ export default function BatchVideo() {
                   <span>Video {selected.size}</span>
                   <span>{selected.duration}s</span>
                   <span>Ảnh tham chiếu ({selected.refUrls?.length || 0})</span>
-                  <span>{selected.cost} điểm</span>
                   {selectedDeleteAt && (
                     <span className="flex items-center gap-1 text-amber-300/90">
                       <Clock size={11} /> Tự xóa sau {fmtCountdown(selectedDeleteAt - now)}

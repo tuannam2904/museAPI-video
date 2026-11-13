@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Users, Film, CheckCircle2, XCircle, Loader2, Cpu, Wallet, Settings2,
-  RefreshCw, Search, Plus, Minus, ShieldOff, ShieldCheck, Save, Zap, MessageSquare, Trash2, TrendingUp,
+  RefreshCw, Search, ShieldOff, ShieldCheck, Save, Zap, MessageSquare, Trash2, TrendingUp,
   HardDrive, UserPlus, Crown,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -13,7 +13,6 @@ import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 const TABS = [
   ['overview', 'Tổng quan', Cpu],
   ['users', 'Người dùng', Users],
-  ['ledger', 'Lịch sử điểm', Wallet],
   ['audit', 'Nhật ký', ShieldCheck],
   ['orders', 'Đơn hàng', Wallet],
   ['vip', 'VIP', Crown],
@@ -42,7 +41,6 @@ export default function Admin() {
 
       {tab === 'overview' && <Overview />}
       {tab === 'users' && <UsersPanel />}
-      {tab === 'ledger' && <LedgerPanel />}
       {tab === 'audit' && <AuditPanel />}
       {tab === 'orders' && <OrdersPanel />}
       {tab === 'vip' && <VipPanel />}
@@ -190,8 +188,6 @@ function Overview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Video đã tạo" value={s.videos ?? 0} />
         <MiniStat label="Ảnh đã tạo" value={s.images ?? 0} />
-        <MiniStat label="Tổng điểm người dùng" value={s.credits ?? 0} />
-        <MiniStat label="Đã tiêu thụ" value={s.consumed ?? 0} />
       </div>
 
       {/* 7 ngày gần đây */}
@@ -212,7 +208,7 @@ function Overview() {
                   <div
                     className="w-full max-w-[34px] rounded-t-md bg-gradient-to-t from-brand-600/40 to-brand-400 transition-all"
                     style={{ height: `${h}px` }}
-                    title={`${d.jobs} tác vụ · ${d.credits} điểm`}
+                    title={`${d.jobs} tác vụ`}
                   />
                   <span className="font-mono text-[9.5px] text-ink-500">{d.date}</span>
                 </div>
@@ -303,14 +299,6 @@ function UsersPanel() {
     }
   };
 
-  const recharge = (u) => {
-    const v = prompt(`Cộng/trừ điểm cho ${u.email} (số âm là trừ)`, '100');
-    if (!v) return;
-    const n = Number(v);
-    if (!Number.isFinite(n) || n === 0) return toast('Nhập số khác 0', 'error');
-    patch(u.id, { credits: n }, n > 0 ? `Đã cộng ${n} điểm` : `Đã trừ ${-n} điểm`);
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -337,7 +325,6 @@ function UsersPanel() {
         </Select>
         <Select value={sort} onChange={(e) => setSort(e.target.value)} className="w-[170px]">
           <option value="createdAt">Mới nhất</option>
-          <option value="creditsSpent">Tiêu nhiều nhất</option>
           <option value="jobs">Nhiều tác vụ nhất</option>
           <option value="mediaMB">Media nhiều nhất</option>
         </Select>
@@ -381,10 +368,8 @@ function UsersPanel() {
                 <th className="px-4 py-2.5 font-medium">Người dùng</th>
                 <th className="px-3 py-2.5 font-medium">Vai trò</th>
                 <th className="px-3 py-2.5 font-medium">Trạng thái</th>
-                <th className="px-3 py-2.5 text-right font-medium">Điểm</th>
                 <th className="px-3 py-2.5 text-right font-medium">Video</th>
                 <th className="px-3 py-2.5 text-right font-medium">Ảnh</th>
-                <th className="px-3 py-2.5 text-right font-medium">Đã tiêu</th>
                 <th className="px-3 py-2.5 text-right font-medium">Media</th>
                 <th className="px-3 py-2.5 font-medium">Hoạt động cuối</th>
                 <th className="px-3 py-2.5 text-right font-medium">TK Muse</th>
@@ -414,10 +399,8 @@ function UsersPanel() {
                   <td className="px-3 py-2.5">
                     <Badge tone={u.status === 'active' ? 'ok' : 'error'}>{u.status === 'active' ? 'Bình thường' : 'Đã cấm'}</Badge>
                   </td>
-                  <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-amber-300">{u.credits}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{st.videos ?? 0}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{st.images ?? 0}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-rose-300">{st.creditsSpent ?? 0}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-mist-300">
                     {st.mediaMB != null ? `${st.mediaMB} MB` : '—'}
                     {st.mediaFiles ? <span className="text-ink-500"> · {st.mediaFiles} file</span> : ''}
@@ -427,13 +410,6 @@ function UsersPanel() {
                   <td className="px-3 py-2.5 text-[11px] text-ink-500">{fmtTime(u.createdAt)}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => recharge(u)}
-                        className="rounded-md border border-ink-600 p-1.5 text-mist-300 hover:border-brand-500/60 hover:text-brand-300"
-                        title="Cộng/trừ điểm"
-                      >
-                        <Plus size={12} />
-                      </button>
                       <button
                         onClick={() => patch(u.id, { role: u.role === 'admin' ? 'user' : 'admin' }, u.role === 'admin' ? 'Đã hạ xuống user' : 'Đã nâng lên admin')}
                         disabled={u.id === me?.id}
@@ -488,7 +464,7 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
   const [pw, setPw] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
   const [pwResult, setPwResult] = useState('');
-  const [limits, setLimits] = useState({ daily_credit_cap: '', max_concurrent_jobs: '', media_max_mb: '' });
+  const [limits, setLimits] = useState({ daily_video_limit: '', max_concurrent_jobs: '', media_max_mb: '' });
   const [limitsBusy, setLimitsBusy] = useState(false);
   const [vipDays, setVipDays] = useState('30');
   const [vipBusy, setVipBusy] = useState(false);
@@ -501,7 +477,7 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
       setDetail(out);
       const lim = out.user?.limits || {};
       setLimits({
-        daily_credit_cap: lim.daily_credit_cap ?? '',
+        daily_video_limit: lim.daily_video_limit ?? '',
         max_concurrent_jobs: lim.max_concurrent_jobs ?? '',
         media_max_mb: lim.media_max_mb ?? '',
       });
@@ -542,7 +518,7 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
 
   const saveLimits = async () => {
     const body = {};
-    for (const k of ['daily_credit_cap', 'max_concurrent_jobs', 'media_max_mb']) {
+    for (const k of ['daily_video_limit', 'max_concurrent_jobs', 'media_max_mb']) {
       const v = limits[k];
       body[k] = v === '' || v === null || v === undefined ? null : Number(v);
     }
@@ -564,7 +540,7 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
 
   const remove = async () => {
     const u = detail?.user;
-    if (!(await confirmDialog(`Xóa user «${u?.email}»? Toàn bộ tác vụ, lịch sử điểm, tài khoản Muse, phim và media của user này sẽ bị xóa.`, { dontAskKey: 'admin-delete-user' }))) return;
+    if (!(await confirmDialog(`Xóa user «${u?.email}»? Toàn bộ tác vụ, tài khoản Muse, phim và media của user này sẽ bị xóa.`, { dontAskKey: 'admin-delete-user' }))) return;
     setDeleting(true);
     try {
       await api.adminDeleteUser(userId);
@@ -612,7 +588,6 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
   const u = detail?.user;
   const st = detail?.stats || u?.stats || {};
   const jobs = detail?.jobs || [];
-  const ledger = detail?.ledger || [];
   const accounts = detail?.accounts || [];
   const films = detail?.films || [];
   const media = detail?.media || {};
@@ -633,7 +608,6 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
             {u.vipExpiresAt && u.vipExpiresAt > Date.now() && (
               <Badge tone="warn">VIP đến {fmtTime(u.vipExpiresAt)}</Badge>
             )}
-            <span className="text-[12px] text-mist-400">Điểm: <b className="text-amber-300">{u.credits}</b></span>
             <span className="text-[12px] text-mist-400">Đăng ký: {fmtTime(u.createdAt)}</span>
           </div>
 
@@ -645,10 +619,6 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
             <div className="rounded-xl bg-ink-900 px-2 py-2.5">
               <p className="text-[17px] font-semibold tabular-nums text-white">{st.images ?? 0}</p>
               <p className="text-[11px] text-mist-400">Ảnh</p>
-            </div>
-            <div className="rounded-xl bg-ink-900 px-2 py-2.5">
-              <p className="text-[17px] font-semibold tabular-nums text-rose-300">{st.creditsSpent ?? 0}</p>
-              <p className="text-[11px] text-mist-400">Điểm đã tiêu</p>
             </div>
             <div className="rounded-xl bg-ink-900 px-2 py-2.5">
               <p className="text-[17px] font-semibold tabular-nums text-white">{st.mediaMB ?? 0} MB</p>
@@ -693,8 +663,8 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
             <h4 className="text-[13px] font-semibold text-mist-200">Hạn mức riêng</h4>
             <p className="mt-0.5 text-[11.5px] text-ink-500">Để trống = không giới hạn</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <Field label="Điểm tối đa mỗi ngày">
-                <Input type="number" min="0" value={limits.daily_credit_cap} onChange={(e) => setLimits((l) => ({ ...l, daily_credit_cap: e.target.value }))} placeholder="Không giới hạn" />
+              <Field label="Giới hạn video/ngày">
+                <Input type="number" min="0" value={limits.daily_video_limit} onChange={(e) => setLimits((l) => ({ ...l, daily_video_limit: e.target.value }))} placeholder="Không giới hạn (dùng mặc định chung)" />
               </Field>
               <Field label="Tác vụ chạy cùng lúc">
                 <Input type="number" min="0" value={limits.max_concurrent_jobs} onChange={(e) => setLimits((l) => ({ ...l, max_concurrent_jobs: e.target.value }))} placeholder="Không giới hạn" />
@@ -740,9 +710,9 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
             </div>
           </div>
 
-          {/* 4 tab chi tiết */}
+          {/* 3 tab chi tiết */}
           <div className="flex gap-1.5 rounded-xl bg-ink-850 p-1 w-fit">
-            {[['jobs', 'Tác vụ'], ['ledger', 'Lịch sử điểm'], ['accounts', 'Tài khoản Muse'], ['media', 'Media & Phim']].map(([k, label]) => (
+            {[['jobs', 'Tác vụ'], ['accounts', 'Tài khoản Muse'], ['media', 'Media & Phim']].map(([k, label]) => (
               <button
                 key={k}
                 onClick={() => setDtab(k)}
@@ -766,29 +736,10 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
                     <span className="min-w-0 flex-1 truncate text-[12px] text-mist-300" title={j.prompt}>{j.prompt || '(không có prompt)'}</span>
                     <Badge tone={j.type === 'video' ? 'brand' : 'neutral'}>{j.type === 'video' ? 'Video' : 'Ảnh'}</Badge>
                     <Badge tone={tone}>{label}</Badge>
-                    <span className="shrink-0 text-[11px] tabular-nums text-mist-400">{j.cost ?? 0} điểm</span>
                     <span className="shrink-0 text-[10.5px] text-ink-500">{fmtAgo(j.created_at)}</span>
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {dtab === 'ledger' && (
-            <div className="space-y-1.5">
-              {ledger.length === 0 && <p className="py-6 text-center text-[12.5px] text-ink-500">Chưa có giao dịch điểm nào</p>}
-              {ledger.map((e) => (
-                <div key={e.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-900 px-2.5 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] text-mist-300">{e.reason}</p>
-                    <p className="text-[10.5px] text-ink-500">{fmtTime(e.created_at)}{e.job_id ? ` · ${e.job_id}` : ''}</p>
-                  </div>
-                  <span className={clsx('shrink-0 font-mono text-[12.5px] font-semibold', e.delta >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
-                    {e.delta >= 0 ? `+${e.delta}` : e.delta}
-                  </span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-mist-400">Số dư {e.balance_after}</span>
-                </div>
-              ))}
             </div>
           )}
 
@@ -840,93 +791,13 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
               disabled={u.id === me?.id}
               className="w-full border-rose-500/40 text-rose-300 hover:border-rose-500/70"
             >
-              <Trash2 size={13} /> Xóa user này (xóa cả tác vụ, lịch sử điểm, tài khoản Muse, phim và media)
+              <Trash2 size={13} /> Xóa user này (xóa cả tác vụ, tài khoản Muse, phim và media)
             </Button>
             {u.id === me?.id && <p className="mt-2 text-center text-[11px] text-ink-500">Không thể xóa chính mình</p>}
           </div>
         </div>
       )}
     </Drawer>
-  );
-}
-
-/* ------------------------------- Lịch sử điểm ------------------------------- */
-function LedgerPanel() {
-  const toast = useToast();
-  const [entries, setEntries] = useState([]);
-  const [userFilter, setUserFilter] = useState('');
-  const [reasonFilter, setReasonFilter] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = { limit: 100 };
-      if (userFilter.trim()) params.user_id = userFilter.trim();
-      if (reasonFilter.trim()) params.reason = reasonFilter.trim();
-      const out = await api.adminLedger(params);
-      setEntries(out.entries || []);
-    } catch (e) {
-      toast(e.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast, userFilter, reasonFilter]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={userFilter}
-          onChange={(e) => setUserFilter(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && load()}
-          placeholder="Lọc theo email hoặc ID user…"
-          className="max-w-xs"
-        />
-        <Input
-          value={reasonFilter}
-          onChange={(e) => setReasonFilter(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && load()}
-          placeholder="Lọc theo lý do…"
-          className="max-w-xs"
-        />
-        <Button variant="outline" size="md" onClick={() => load()} loading={loading}>Tìm</Button>
-      </div>
-
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[12.5px]">
-            <thead className="border-b border-ink-700 text-[11px] uppercase tracking-wide text-ink-500">
-              <tr>
-                <th className="px-4 py-2.5 font-medium">Người dùng</th>
-                <th className="px-3 py-2.5 text-right font-medium">Thay đổi</th>
-                <th className="px-3 py-2.5 text-right font-medium">Số dư sau</th>
-                <th className="px-3 py-2.5 font-medium">Lý do</th>
-                <th className="px-3 py-2.5 font-medium">Tác vụ</th>
-                <th className="px-4 py-2.5 font-medium">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-800">
-              {entries.map((e) => (
-                <tr key={e.id} className="hover:bg-ink-800/40">
-                  <td className="px-4 py-2.5 text-[11.5px] text-mist-300">{e.email || e.user_id}</td>
-                  <td className={clsx('px-3 py-2.5 text-right font-mono font-semibold', e.delta >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
-                    {e.delta >= 0 ? `+${e.delta}` : e.delta}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-mist-200">{e.balance_after}</td>
-                  <td className="px-3 py-2.5 text-mist-300">{e.reason}</td>
-                  <td className="px-3 py-2.5 font-mono text-[11px] text-ink-500">{e.job_id || '—'}</td>
-                  <td className="px-4 py-2.5 text-[11px] text-ink-500">{fmtTime(e.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {entries.length === 0 && !loading && <Empty icon={Wallet} title="Chưa có giao dịch điểm nào" />}
-      </div>
-    </div>
   );
 }
 
@@ -1017,7 +888,7 @@ function OrdersPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {[['', 'Tất cả'], ['recharge', 'Nạp điểm'], ['membership', 'Gói đăng ký']].map(([k, label]) => (
+        {[['', 'Tất cả'], ['membership', 'Gói đăng ký']].map(([k, label]) => (
           <button
             key={k}
             onClick={() => { setKind(k); load(k); }}
@@ -1043,7 +914,6 @@ function OrdersPanel() {
                 <th className="px-3 py-2.5 font-medium">Người dùng</th>
                 <th className="px-3 py-2.5 font-medium">Loại</th>
                 <th className="px-3 py-2.5 text-right font-medium">Số tiền</th>
-                <th className="px-3 py-2.5 text-right font-medium">Điểm</th>
                 <th className="px-3 py-2.5 font-medium">Trạng thái</th>
                 <th className="px-4 py-2.5 font-medium">Thời gian</th>
               </tr>
@@ -1054,12 +924,9 @@ function OrdersPanel() {
                   <td className="px-4 py-2.5 font-mono text-[11px] text-mist-300">{o.id}</td>
                   <td className="px-3 py-2.5 text-[11.5px] text-mist-300">{o.email || '—'}</td>
                   <td className="px-3 py-2.5">
-                    <Badge tone={o.kind === 'recharge' ? 'brand' : 'warn'}>
-                      {o.kind === 'recharge' ? 'Nạp điểm' : 'Gói đăng ký'}
-                    </Badge>
+                    <Badge tone="warn">Gói đăng ký</Badge>
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-mist-100">¥{o.amount}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-gold-400">+{o.credits}</td>
                   <td className="px-3 py-2.5">
                     <Badge tone={o.status === 'paid' ? 'ok' : 'neutral'}>
                       {o.status === 'paid' ? 'Đã thanh toán' : o.status}
@@ -1179,6 +1046,9 @@ function VipPanel() {
           </Field>
           <Field label="Giới hạn lượt tạo / ngày / acc VIP" hint="Mỗi tài khoản VIP tạo tối đa từng này lượt mỗi ngày — hết lượt thì user tự thêm tài khoản của họ">
             <Input type="number" min="0" value={settings.vipDailyVideoLimit ?? ''} onChange={set('vipDailyVideoLimit')} placeholder="100" />
+          </Field>
+          <Field label="Video/ngày mặc định (người dùng thường)" hint="Giới hạn video mỗi ngày áp dụng khi user không có hạn mức riêng — để trống là không giới hạn">
+            <Input type="number" min="0" value={settings.dailyVideoLimit ?? ''} onChange={set('dailyVideoLimit')} placeholder="100" />
           </Field>
         </div>
       </div>
@@ -1442,32 +1312,13 @@ function SettingsPanel() {
             <Input value={settings.siteName} onChange={set('siteName')} />
           </Field>
           <Field label="Thông báo trang chủ" hint="Để trống thì không hiện">
-            <Input value={settings.notice} onChange={set('notice')} placeholder="VD: user mới đăng ký tặng 100 điểm" />
+            <Input value={settings.notice} onChange={set('notice')} placeholder="VD: Thông báo mới nhất của studio" />
           </Field>
           <Field label="Mở đăng ký">
             <Select value={settings.allowRegister} onChange={set('allowRegister')}>
               <option value="1">Cho tự đăng ký</option>
               <option value="0">Đóng đăng ký (chỉ admin tạo tài khoản)</option>
             </Select>
-          </Field>
-          <Field label="Điểm tặng khi đăng ký">
-            <Input type="number" value={settings.signupCredits} onChange={set('signupCredits')} />
-          </Field>
-        </div>
-      </div>
-
-      <div className="card p-5">
-        <h3 className="mb-1 text-[13.5px] font-semibold text-mist-200">Giá (điểm)</h3>
-        <p className="mb-4 text-[11.5px] text-ink-500">Video tiêu = giá gốc + đơn giá/giây × thời lượng; VD: 10 + 2×5s = 20</p>
-        <div className="grid gap-3.5 sm:grid-cols-3">
-          <Field label="Giá gốc video">
-            <Input type="number" value={settings.priceVideoBase} onChange={set('priceVideoBase')} />
-          </Field>
-          <Field label="Đơn giá mỗi giây video">
-            <Input type="number" value={settings.priceVideoPerSecond} onChange={set('priceVideoPerSecond')} />
-          </Field>
-          <Field label="Đơn giá ảnh">
-            <Input type="number" value={settings.priceImage} onChange={set('priceImage')} />
           </Field>
         </div>
       </div>

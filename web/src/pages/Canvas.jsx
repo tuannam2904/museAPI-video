@@ -23,8 +23,6 @@ import StoryboardDrawer from '../components/StoryboardDrawer.jsx';
 
 const STORE_KEY = 'xm_canvas_v1';
 const GRID_KEY = 'xm_canvas_grid';
-const IMAGE_COST = 5;
-
 const NODE_W = 260;
 const NODE_H = 170;
 // Chiều cao node khi render KHÔNG cố định: <p> văn bản dùng min-h 76px (border-box)
@@ -68,7 +66,7 @@ const defaultDoc = () => ({
 });
 
 export default function Canvas() {
-  const { user, refresh } = useAuth();
+  const { refresh } = useAuth();
   const toast = useToast();
   const confirmDialog = useConfirmDialog();
 
@@ -1123,9 +1121,6 @@ export default function Canvas() {
     const promptText = node.text?.trim() || textInputs.join('\n') || '';
     if (promptText.length < 2) return toast('Nút này chưa có câu lệnh — nhập câu lệnh hoặc nối một nút văn bản vào', 'error');
     const isImage = node.type === 'image';
-    const cost = isImage ? IMAGE_COST : 10 + 2 * (node.duration || 5);
-    // Nút video bật acc VIP thì không tốn điểm — chỉ tính vào giới hạn lượt tạo mỗi ngày của acc VIP.
-    if (!node.vip && (user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
     setBusy(true);
     try {
       const { job } = isImage

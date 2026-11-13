@@ -23,10 +23,9 @@ const IDEAS = [
 const STORE_KEY = 'xm_projects';
 const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
-const IMAGE_COST = 5;
 
 export default function Create() {
-  const { user, refresh } = useAuth();
+  const { refresh } = useAuth();
   const toast = useToast();
   const confirmDialog = useConfirmDialog();
   const nav = useNavigate();
@@ -58,8 +57,6 @@ export default function Create() {
 
   const fileRef = useRef(null);
   const pollRef = useRef(null);
-
-  const cost = mode === 'image' ? IMAGE_COST : 10 + 2 * duration;
 
   const switchMode = (m) => {
     setMode(m);
@@ -177,7 +174,6 @@ export default function Create() {
 
   const generate = async () => {
     if (prompt.trim().length < 2) return toast('Hãy nhập câu lệnh và chọn mô hình trước', 'error');
-    if ((user?.credits ?? 0) < cost) return toast(`Không đủ điểm, lần này cần ${cost}`, 'error');
     setBusy(true);
     try {
       if (mode === 'image') {
@@ -555,7 +551,6 @@ export default function Create() {
             <p className="text-[13px] leading-relaxed text-mist-200">{preview.prompt}</p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-ink-500">
               <span>{preview.params?.duration ? `${preview.params.duration}s · ` : ''}{preview.params?.size}</span>
-              <span>{preview.cost} điểm</span>
               {preview.params?.extra && <span className="truncate">{preview.params.extra}</span>}
               <span>{fmtAgo(preview.createdAt)}</span>
               {jobDeleteAt(preview, retentionDays) && (

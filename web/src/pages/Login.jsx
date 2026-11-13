@@ -8,7 +8,7 @@ import { Button, Field, Input, useToast } from '../components/ui.jsx';
 const HIGHLIGHTS = [
   { icon: Film, title: 'Video từ văn bản · Video từ hình ảnh', desc: 'Một câu lệnh tạo video 5–10 giây, hỗ trợ khung hình đầu/cuối và ảnh tham khảo' },
   { icon: Layers, title: 'Canvas vô hạn · Luồng công việc dạng node', desc: 'Kéo thả node để nối quy trình tạo, tự động lưu' },
-  { icon: Zap, title: 'Kho tài khoản · Tự động điều phối', desc: 'Luân chuyển và gia hạn nhiều tài khoản, thất bại tự động hoàn điểm' },
+  { icon: Zap, title: 'Kho tài khoản · Tự động điều phối', desc: 'Luân chuyển và gia hạn nhiều tài khoản tự động' },
 ];
 
 export default function Login() {
@@ -33,7 +33,7 @@ export default function Login() {
         toast('Chào mừng bạn trở lại', 'ok');
       } else {
         await register(form.email.trim(), form.password, form.name.trim() || undefined, ref || undefined);
-        toast(ref ? 'Đăng ký thành công, phần thưởng mời đã được cộng' : 'Đăng ký thành công, đã tặng điểm', 'ok');
+        toast('Đăng ký thành công', 'ok');
       }
     } catch (ex) {
       setErr(ex.message);
@@ -111,7 +111,7 @@ export default function Login() {
             <form onSubmit={submit} className="space-y-3.5">
               {ref && (
                 <div className="flex items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-[11.5px] text-brand-300">
-                  <Gift size={13} /> Bạn được mời đăng ký, sau khi hoàn tất cả hai bên đều nhận 50 điểm
+                  <Gift size={13} /> Bạn được mời đăng ký — hoàn tất đăng ký để bắt đầu
                 </div>
               )}
 

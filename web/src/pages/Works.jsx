@@ -131,12 +131,11 @@ export default function Works() {
         />
       ) : view === 'list' ? (
         <div className="overflow-hidden rounded-xl border border-ink-700 bg-ink-850">
-          <div className="hidden grid-cols-[112px_minmax(0,1fr)_76px_84px_64px_88px_128px_76px] items-center gap-3 border-b border-ink-700 px-4 py-2.5 text-[11px] font-medium uppercase tracking-wide text-ink-500 lg:grid">
+          <div className="hidden grid-cols-[112px_minmax(0,1fr)_76px_84px_88px_128px_76px] items-center gap-3 border-b border-ink-700 px-4 py-2.5 text-[11px] font-medium uppercase tracking-wide text-ink-500 lg:grid">
             <span>Xem trước</span>
             <span>Nội dung</span>
             <span>Loại</span>
             <span>Thời lượng</span>
-            <span className="text-right">Điểm</span>
             <span>Tạo lúc</span>
             <span>Tự xóa sau</span>
             <span className="text-right">Thao tác</span>
@@ -188,7 +187,6 @@ export default function Works() {
             <p className="text-[13px] leading-relaxed text-mist-200">{preview.prompt}</p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-500">
               <span>{preview.params?.duration || 5}s · {preview.params?.size}</span>
-              <span>{preview.cost} điểm</span>
               <span>{fmtAgo(preview.createdAt)}</span>
               {preview.result?.bytes && <span>{fmtBytes(preview.result.bytes)}</span>}
               {jobDeleteAt(preview, retentionDays) && (
@@ -313,7 +311,7 @@ function WorkRow({ job, now, retentionDays, onOpen, onDelete }) {
   const isVideo = /\.(mp4|webm|mov)/i.test(job.mediaUrl || '');
 
   return (
-    <div className="grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition hover:bg-ink-800/40 lg:grid-cols-[112px_minmax(0,1fr)_76px_84px_64px_88px_128px_76px] lg:gap-3 lg:px-4">
+    <div className="grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition hover:bg-ink-800/40 lg:grid-cols-[112px_minmax(0,1fr)_76px_84px_88px_128px_76px] lg:gap-3 lg:px-4">
       <button onClick={onOpen} className="relative block aspect-video w-[88px] overflow-hidden rounded-lg bg-ink-900 lg:w-[112px]">
         {job.mediaUrl ? (
           isVideo ? (
@@ -341,7 +339,6 @@ function WorkRow({ job, now, retentionDays, onOpen, onDelete }) {
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-500 lg:hidden">
           <span>{job.type === 'video' ? 'Video' : 'Hình ảnh'}</span>
           <span>{job.params?.duration ? `${job.params.duration}s · ` : ''}{job.params?.size}</span>
-          <span>{job.cost} điểm</span>
           {deleteAt && <span className="text-amber-300/90">Xóa sau {fmtCountdown(deleteAt - now)}</span>}
         </p>
       </button>
@@ -353,7 +350,6 @@ function WorkRow({ job, now, retentionDays, onOpen, onDelete }) {
       <span className="hidden text-[12px] text-mist-300 lg:block">
         {job.params?.duration ? `${job.params.duration}s · ` : ''}{job.params?.size || '—'}
       </span>
-      <span className="hidden text-right text-[12px] font-medium tabular-nums text-amber-300 lg:block">{job.cost}</span>
       <span className="hidden text-[12px] text-mist-400 lg:block">{fmtAgo(job.createdAt)}</span>
       <span className="hidden text-[12px] lg:block">
         {deleteAt ? (
