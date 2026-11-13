@@ -834,7 +834,7 @@ class MuseEngine:
     _QUOTA_SETTINGS_JS = r"""(() => {
         const visible = e => e.getClientRects().length > 0
             && getComputedStyle(e).visibility !== 'hidden';
-        const labels = ['Settings', '設定', '设置'];
+        const labels = ['Settings', '設定', '设置', 'Cài đặt'];
         const b = [...document.querySelectorAll('[data-testid="hatch-dock-more"]')].find(visible)
             || [...document.querySelectorAll('button,[role=button]')].find(e =>
                 visible(e) && labels.includes((e.getAttribute('aria-label') || '').trim()));
@@ -846,8 +846,9 @@ class MuseEngine:
     _QUOTA_MENU_JS = r"""(() => {
         const visible = e => e.getClientRects().length > 0
             && getComputedStyle(e).visibility !== 'hidden';
-        const labels = ['Settings', '設定', '设置'];
-        const exact = e => labels.includes((e.textContent || '').trim());
+        const labels = ['Settings', '設定', '设置', 'Cài đặt'];
+        const exact = e => labels.includes((e.textContent || '').trim())
+            || labels.includes((e.getAttribute('aria-label') || '').trim());
         // Menu items include a shortcut suffix (for example 設定Ctrl+,).
         const b = [...document.querySelectorAll('[role=menuitem]')].find(e =>
             visible(e) && (exact(e) || [...e.querySelectorAll('span,div')].some(exact)))
@@ -909,19 +910,19 @@ class MuseEngine:
 
     @staticmethod
     def _parse_quota(txt: str) -> dict:
-        """Parse English, traditional Chinese and simplified Chinese usage text."""
+        """Parse English, Vietnamese, traditional Chinese and simplified Chinese usage text."""
         normalized = unicodedata.normalize('NFKC', txt or '')
         lines = [ln.strip() for ln in normalized.splitlines() if ln.strip()]
         # Avoid unrelated account/profile text before the Usage section.
         start = next((i + 1 for i, ln in enumerate(lines)
-                      if ln.lower() in ('usage', '用量', '使用量')), 0)
+                      if ln.lower() in ('usage', '用量', '使用量', 'mức sử dụng')), 0)
         lines = lines[start:]
         end = next((i for i, ln in enumerate(lines)
-                    if ln.lower() in ('language', '语言', '語言')), len(lines))
+                    if ln.lower() in ('language', '语言', '語言', 'ngôn ngữ')), len(lines))
         lines = lines[:end]
         out: dict = {'raw': '\n'.join(lines[:40])}
         for ln in lines:
-            if re.fullmatch(r'.{1,60}?(?:\s+plan|計劃|计划|方案)', ln, re.I):
+            if re.fullmatch(r'.{1,60}?(?:\s+plan|計劃|计划|方案)', ln, re.I) or re.match(r'gói\s+', ln, re.I):
                 out['plan'] = ln
                 break
         text = '\n'.join(lines)
@@ -930,11 +931,13 @@ class MuseEngine:
             reset = re.search(
                 r'(?:每(?:週|周|星期)|週|周)(?:上限|限額|限额|額度|额度)'
                 r'(?:會|会|將|将)?(?:於|于|在)\s*([^\n]+?)\s*(?:重設|重置)', text)
+        if not reset:
+            reset = re.search(r'Giới hạn hàng tuần.*?đặt lại vào\s+([^\n]+)', text, re.I)
         if reset:
             out['weekly_reset'] = reset.group(1).strip()
 
         extra_at = next((i for i, ln in enumerate(lines) if re.match(
-            r'^(?:(?:Additional|Extra)\s+tokens|(?:額外|额外)(?:的)?(?:符元|符記|代幣|代币|令牌|憑證|凭证|tokens))',
+            r'^(?:(?:Additional|Extra)\s+tokens|Token\s+bổ\s+sung|(?:額外|额外)(?:的)?(?:符元|符記|代幣|代币|令牌|憑證|凭证|tokens))',
             ln, re.I)), len(lines))
 
         def percentage(line):
@@ -942,8 +945,10 @@ class MuseEngine:
             if not m:
                 m = re.search(r'已(?:使)?用\s*(\d+(?:\.\d+)?)\s*%', line)
             if not m:
+                m = re.search(r'Đã\s+dùng\s*(\d+(?:[.,]\d+)?)\s*%', line, re.I)
+            if not m:
                 return None
-            value = float(m.group(1))
+            value = float(m.group(1).replace(',', '.'))
             if not 0 <= value <= 100:
                 return None
             return int(value) if value.is_integer() else value
@@ -961,7 +966,7 @@ class MuseEngine:
                 if left:
                     out['extra_left'] = left.group(1).strip()
                 break
-        if re.search(r'Never expires|永不過期|永不过期', text, re.I):
+        if re.search(r'Never expires|永不過期|永不过期|Không bao giờ hết hạn', text, re.I):
             out['extra_expires'] = 'never'
         # A plan label alone is not a successful quota read. Preserve old cache.
         out['found'] = 'weekly_used_pct' in out
