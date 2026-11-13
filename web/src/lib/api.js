@@ -59,8 +59,12 @@ export const api = {
   deleteJob: (id) => request(`/api/jobs/${id}`, { method: 'DELETE' }),
   mediaStats: () => request('/api/media-stats'),
 
-  getCanvas: () => request('/api/canvas'),
-  saveCanvas: (doc) => request('/api/canvas', { method: 'PUT', body: { doc } }),
+  listCanvas: () => request('/api/canvas'),
+  createCanvas: (title) => request('/api/canvas', { method: 'POST', body: { title } }),
+  getCanvas: (id) => request(`/api/canvas/${id}`),
+  saveCanvas: (id, doc) => request(`/api/canvas/${id}`, { method: 'PUT', body: { doc } }),
+  renameCanvas: (id, title) => request(`/api/canvas/${id}`, { method: 'PATCH', body: { title } }),
+  deleteCanvas: (id) => request(`/api/canvas/${id}`, { method: 'DELETE' }),
 
   upload: (files) => {
     const fd = new FormData();
