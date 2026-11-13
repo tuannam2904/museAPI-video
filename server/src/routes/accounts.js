@@ -5,6 +5,7 @@ import {
   createBindCode, getBindCode, finishBindCode, failBindCode, auditLog,
 } from '../db.js';
 import * as muse from '../muse.js';
+import { vipAccountTodayCount, getVipDailyLimit } from '../lib/accounts.js';
 
 const r = Router();
 
@@ -167,6 +168,7 @@ r.get('/', requireAuth, async (req, res) => {
     try { stored = a.quota ? JSON.parse(a.quota) : null; } catch { stored = null; }
     const quota = parseQuota(up?.quota ?? stored);
     const c = (a.upstream_id && counts.get(a.upstream_id)) || { video: 0, image: 0 };
+    const isVipAcc = Number(a.vip) === 1;
     return {
       id: a.id,
       upstreamId: a.upstream_id,
@@ -174,6 +176,10 @@ r.get('/', requireAuth, async (req, res) => {
       mine: a.owner_id === req.user.id,
       shared: a.owner_id === null,
       isPromptWriter: Number(a.prompt_writer) === 1,
+      isVip: isVipAcc,
+      // Acc VIP: số lượt tạo đã dùng hôm nay / giới hạn lượt/ngày (Admin xem "45/100 hôm nay").
+      todayUsed: isVipAcc ? vipAccountTodayCount(a.upstream_id) : null,
+      dailyLimit: isVipAcc ? getVipDailyLimit() : null,
       status: up ? (up.ok === true ? 'ok' : up.ok === false ? 'error' : 'unknown') : 'missing',
       note: up?.note || a.note || null,
       expiresAt: up?.expires_at ?? a.expires_at,

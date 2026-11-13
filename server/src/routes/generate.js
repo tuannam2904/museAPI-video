@@ -87,8 +87,12 @@ r.post('/upload', requireAuth, upload.array('files', 10), (req, res) => {
 /* Hạn mức từng user: số tác vụ chạy cùng lúc + điểm tiêu mỗi ngày.
  * Trả về thông báo lỗi (tiếng Việt) nếu vi phạm, null nếu được phép.
  * Gọi sau bước kiểm tra số dư và trước khi tạo job / trừ điểm, để yêu cầu
- * bị từ chối không tốn điểm và không tạo job. */
-export function checkUserLimits(userId, cost) {
+ * bị từ chối không tốn điểm và không tạo job.
+ * opts.skipPoints: bỏ qua phần hạn mức điểm (dùng cho lượt tạo VIP — VIP không
+ * tốn điểm nền tảng nên không tính vào hạn mức điểm/ngày, chỉ còn giới hạn
+ * số job chạy cùng lúc). */
+export function checkUserLimits(userId, cost, opts = {}) {
+  const skipPoints = !!opts.skipPoints;
   const u = db.prepare('SELECT daily_credit_cap, max_concurrent_jobs FROM users WHERE id = ?').get(userId);
   if (!u) return null;
   if (u.max_concurrent_jobs != null) {
@@ -99,7 +103,7 @@ export function checkUserLimits(userId, cost) {
       return 'Bạn đang có quá nhiều tác vụ đang chạy, hãy chờ tác vụ hiện tại xong rồi tạo tiếp';
     }
   }
-  if (u.daily_credit_cap != null) {
+  if (!skipPoints && u.daily_credit_cap != null) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const spent = db.prepare(
@@ -121,16 +125,8 @@ r.post('/videos', requireAuth, async (req, res) => {
   const params = { duration: dur, size: CFG.sizes.includes(size) ? size : '16:9', images, extra };
   const cost = priceOf('video', params);
 
-  const fresh = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
-  if (fresh.credits < cost) {
-    return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
-  }
-
-  const limitErr = checkUserLimits(req.user.id, cost);
-  if (limitErr) return res.status(400).json({ error: limitErr });
-
-  // Chọn tài khoản Muse: VIP → acc VIP của admin; thường → chỉ acc của chính user.
-  // Đặt sau kiểm tra số dư/hạn mức và trước khi tạo job/trừ điểm.
+  // Chọn tài khoản Muse TRƯỚC: VIP → acc VIP của admin (chịu giới hạn lượt/ngày),
+  // thường → chỉ acc của chính user. Cần biết mode để quyết định có trừ điểm không.
   const pick = await pickAccountForUser(req.user.id, {
     vip: req.body?.vip === true,
     accountId: req.body?.accountId || null,
@@ -139,11 +135,27 @@ r.post('/videos', requireAuth, async (req, res) => {
     const e = PICK_ERRORS[pick.error] || { status: 400, message: 'Không chọn được tài khoản' };
     return res.status(e.status).json({ error: e.message });
   }
+  const isVip = pick.mode === 'vip';
   params.accountMode = pick.mode;
   params.accountId = pick.platformId;
 
-  const job = createJob(req.user.id, 'video', String(prompt).trim(), params, cost);
-  addCredits(req.user.id, -cost, 'Tạo tác vụ video', job.id);
+  // Lượt tạo VIP không tốn điểm nền tảng: bỏ qua kiểm tra số dư.
+  // Lượt thường vẫn kiểm tra số dư (402) như trước.
+  if (!isVip) {
+    const fresh = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
+    if (fresh.credits < cost) {
+      return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
+    }
+  }
+
+  // Giới hạn số job chạy cùng lúc vẫn áp dụng cho cả VIP; hạn mức điểm/ngày
+  // chỉ áp dụng cho lượt thường (VIP không tốn điểm).
+  const limitErr = checkUserLimits(req.user.id, cost, { skipPoints: isVip });
+  if (limitErr) return res.status(400).json({ error: limitErr });
+
+  // Job VIP ghi cost = 0 (miễn phí điểm); job thường giữ nguyên giá.
+  const job = createJob(req.user.id, 'video', String(prompt).trim(), params, isVip ? 0 : cost);
+  if (!isVip) addCredits(req.user.id, -cost, 'Tạo tác vụ video', job.id);
 
   try {
     const refs = normalizeRefs(images);
@@ -164,9 +176,12 @@ r.post('/videos', requireAuth, async (req, res) => {
     res.json({ job: getJob(job.id) });
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    addCredits(req.user.id, cost, 'Hoàn điểm khi tạo tác vụ thất bại', job.id);
-    updateJob(job.id, { refunded: 1 });
-    res.status(502).json({ error: `Tạo tác vụ thất bại：${e.message}`, refunded: true });
+    // VIP không trừ điểm nên không có gì để hoàn.
+    if (!isVip) {
+      addCredits(req.user.id, cost, 'Hoàn điểm khi tạo tác vụ thất bại', job.id);
+      updateJob(job.id, { refunded: 1 });
+    }
+    res.status(502).json({ error: `Tạo tác vụ thất bại：${e.message}`, refunded: !isVip });
   }
 });
 
@@ -179,16 +194,7 @@ r.post('/images', requireAuth, async (req, res) => {
   const params = { size: CFG.sizes.includes(size) ? size : '1:1', images };
   const cost = priceOf('image', params);
 
-  const fresh = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
-  if (fresh.credits < cost) {
-    return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
-  }
-
-  const limitErr = checkUserLimits(req.user.id, cost);
-  if (limitErr) return res.status(400).json({ error: limitErr });
-
-  // Chọn tài khoản Muse: VIP → acc VIP của admin; thường → chỉ acc của chính user.
-  // Đặt sau kiểm tra số dư/hạn mức và trước khi tạo job/trừ điểm.
+  // Chọn tài khoản Muse TRƯỚC (xem /videos): cần biết mode để quyết định có trừ điểm không.
   const pick = await pickAccountForUser(req.user.id, {
     vip: req.body?.vip === true,
     accountId: req.body?.accountId || null,
@@ -197,11 +203,23 @@ r.post('/images', requireAuth, async (req, res) => {
     const e = PICK_ERRORS[pick.error] || { status: 400, message: 'Không chọn được tài khoản' };
     return res.status(e.status).json({ error: e.message });
   }
+  const isVip = pick.mode === 'vip';
   params.accountMode = pick.mode;
   params.accountId = pick.platformId;
 
-  const job = createJob(req.user.id, 'image', String(prompt).trim(), params, cost);
-  addCredits(req.user.id, -cost, 'Tạo tác vụ hình ảnh', job.id);
+  // Lượt tạo VIP không tốn điểm nền tảng: bỏ qua kiểm tra số dư.
+  if (!isVip) {
+    const fresh = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
+    if (fresh.credits < cost) {
+      return res.status(402).json({ error: `Không đủ điểm, lần này cần ${cost}, hiện có ${fresh.credits}` });
+    }
+  }
+
+  const limitErr = checkUserLimits(req.user.id, cost, { skipPoints: isVip });
+  if (limitErr) return res.status(400).json({ error: limitErr });
+
+  const job = createJob(req.user.id, 'image', String(prompt).trim(), params, isVip ? 0 : cost);
+  if (!isVip) addCredits(req.user.id, -cost, 'Tạo tác vụ hình ảnh', job.id);
 
   try {
     const refs = normalizeRefs(images);
@@ -215,9 +233,12 @@ r.post('/images', requireAuth, async (req, res) => {
     res.json({ job: getJob(job.id) });
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    addCredits(req.user.id, cost, 'Hoàn điểm khi tạo tác vụ thất bại', job.id);
-    updateJob(job.id, { refunded: 1 });
-    res.status(502).json({ error: `Tạo tác vụ thất bại：${e.message}`, refunded: true });
+    // VIP không trừ điểm nên không có gì để hoàn.
+    if (!isVip) {
+      addCredits(req.user.id, cost, 'Hoàn điểm khi tạo tác vụ thất bại', job.id);
+      updateJob(job.id, { refunded: 1 });
+    }
+    res.status(502).json({ error: `Tạo tác vụ thất bại：${e.message}`, refunded: !isVip });
   }
 });
 

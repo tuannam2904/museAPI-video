@@ -7,6 +7,7 @@ import { db, addCredits, getSettings, setSetting, upsertAccount, auditLog, grant
 import { mediaStats, mediaStatsForUser, cleanupMedia } from '../mediaCleanup.js';
 import { MEDIA_DIR } from '../config.js';
 import * as muse from '../muse.js';
+import { vipAccountTodayCount, getVipDailyLimit } from '../lib/accounts.js';
 
 const r = Router();
 r.use(requireAuth, requireAdmin);
@@ -283,13 +284,18 @@ r.post('/vip/orders/:id/confirm', (req, res) => {
   res.json({ ok: true, vipExpiresAt: exp });
 });
 
-/* Danh sách tài khoản Muse (kèm cờ VIP). */
+/* Danh sách tài khoản Muse (kèm cờ VIP + số lượt VIP đã dùng hôm nay / giới hạn ngày). */
 r.get('/accounts', (req, res) => {
   const rows = db.prepare(
     `SELECT a.*, u.email AS owner_email FROM accounts a
      LEFT JOIN users u ON u.id = a.owner_id ORDER BY a.created_at DESC LIMIT 200`
   ).all();
-  res.json({ accounts: rows });
+  const dailyLimit = getVipDailyLimit();
+  const accounts = rows.map((a) => {
+    if (Number(a.vip) !== 1) return { ...a, todayUsed: null, dailyLimit: null };
+    return { ...a, todayUsed: vipAccountTodayCount(a.upstream_id), dailyLimit };
+  });
+  res.json({ accounts });
 });
 
 /* Đánh dấu / bỏ đánh dấu một tài khoản Muse là VIP (do admin cung cấp). */
@@ -404,7 +410,7 @@ r.post('/media-cleanup', (_req, res) => {
 });
 r.patch('/settings', (req, res) => {
   const allow = ['siteName', 'signupCredits', 'priceVideoBase', 'priceVideoPerSecond', 'priceImage', 'allowRegister', 'notice', 'mediaMaxMB', 'mediaRetentionDays', 'mediaGlobalMaxMB',
-    'vipPriceDayVnd', 'vipPriceWeekVnd', 'vipPriceMonthVnd', 'sepayMailApiUrl', 'sepayMailApiToken', 'sepayMbAccountNo', 'sepayMbAccountName', 'sepayMbBin', 'sepayCodePrefix', 'vipOrderTtlMin', 'vipPollSeconds'];
+    'vipPriceDayVnd', 'vipPriceWeekVnd', 'vipPriceMonthVnd', 'vipDailyVideoLimit', 'sepayMailApiUrl', 'sepayMailApiToken', 'sepayMbAccountNo', 'sepayMbAccountName', 'sepayMbBin', 'sepayCodePrefix', 'vipOrderTtlMin', 'vipPollSeconds'];
   const changed = [];
   for (const [k, v] of Object.entries(req.body || {})) {
     if (allow.includes(k)) { setSetting(k, v); changed.push(k); }
