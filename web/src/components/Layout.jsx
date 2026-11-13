@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Sparkles, Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film, Layers, Users, Crown } from 'lucide-react';
+import { Sparkles, Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film, Layers, Users, Crown, User } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../store/auth.jsx';
 
@@ -12,6 +12,7 @@ const NAV = [
   { to: '/works', label: 'Tác phẩm', icon: Film },
   { to: '/accounts', label: 'Nhập Muse', icon: KeyRound },
   { to: '/vip', label: 'VIP', icon: Crown },
+  { to: '/profile', label: 'Trang cá nhân', icon: User },
 ];
 const ADMIN_NAV = { to: '/admin', label: 'Quản trị', icon: ShieldCheck };
 
@@ -40,12 +41,13 @@ export default function Layout() {
         </nav>
 
         <div className="mt-auto flex flex-col items-center gap-2">
-          <span
-            title={`${user?.name || 'Chưa đặt tên'} · ${user?.email || ''}`}
-            className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-[#161c2c] text-[12px] font-semibold text-mist-100"
+          <button
+            onClick={() => nav('/profile')}
+            title="Trang cá nhân"
+            className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-[#161c2c] text-[12px] font-semibold text-mist-100 transition hover:border-brand-400/50 hover:text-white"
           >
             {initial}
-          </span>
+          </button>
           <button
             onClick={logout}
             title="Đăng xuất"
