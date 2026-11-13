@@ -341,16 +341,41 @@ function AccountRow({ a, isAdmin, busy, expanded, onToggleExpand, onTest, onKeep
             {showPromptWriter && <Badge tone="brand">Viết prompt</Badge>}
           </div>
           {sub && <p className="mt-0.5 truncate text-[11.5px] text-mist-400" title={sub}>{sub}</p>}
+          {a.quota && left != null ? (
+            <div className="mt-1.5 flex gap-3">
+              <div className="min-w-0 flex-1" title={a.quota.weeklyReset ? `Đặt lại vào ${a.quota.weeklyReset}` : undefined}>
+                <div className="flex justify-between text-[10.5px]">
+                  <span className="shrink-0 text-mist-400">Tuần</span>
+                  <span className="truncate text-mist-200">còn {left}%</span>
+                </div>
+                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className={clsx(
+                      'h-full rounded-full transition-all',
+                      left > 40 ? 'bg-gradient-to-r from-brand-500 to-brand-400' : left > 15 ? 'bg-gold-400' : 'bg-rose-400'
+                    )}
+                    style={{ width: `${Math.max(2, left)}%` }}
+                  />
+                </div>
+              </div>
+              <div className="min-w-0 flex-1" title={a.quota.extraUsedPct != null ? `Đã dùng ${a.quota.extraUsedPct}%` : undefined}>
+                <div className="flex justify-between text-[10.5px]">
+                  <span className="shrink-0 text-mist-400">Thưởng</span>
+                  <span className="truncate text-mist-200">còn {a.quota.extraLeft || '—'}</span>
+                </div>
+                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-amber-400 transition-all"
+                    style={{ width: `${Math.max(2, 100 - (a.quota.extraUsedPct ?? 0))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[10.5px] text-amber-300">Chưa đọc được hạn mức</p>
+          )}
         </div>
         <div className="hidden shrink-0 items-center gap-3 text-[12px] text-mist-300 md:flex">
-          {left != null ? (
-            <span className="whitespace-nowrap" title={`Hạn mức tuần còn ${left}%`}>
-              Còn <b className="text-brand-300">{left}%</b>
-              {a.quota?.plan && <span className="ml-1 text-[11px] text-ink-500">{a.quota.plan}</span>}
-            </span>
-          ) : (
-            <span className="whitespace-nowrap text-amber-300">Chưa đọc được</span>
-          )}
           <span className="flex items-center gap-1 whitespace-nowrap">
             <Video size={12} className="text-brand-400" />
             {a.videoCount ?? 0} video · {a.imageCount ?? 0} ảnh
