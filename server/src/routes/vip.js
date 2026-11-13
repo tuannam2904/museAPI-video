@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { requireAuth } from '../auth.js';
 import { db, uid, now, getSettings, isVip, vipExpiresAt } from '../db.js';
 import { vietqrPayload, newCode } from '../lib/sepay.js';
+import { vipPoolStatus } from '../lib/accounts.js';
 
 const r = Router();
 r.use(requireAuth);
@@ -97,10 +98,13 @@ r.post('/order', async (req, res) => {
 });
 
 /* Trạng thái VIP + bảng giá 3 gói (để frontend render). */
-r.get('/status', (req, res) => {
+r.get('/status', async (req, res) => {
   const settings = getSettings();
   const plans = plansList(settings);
   const month = plans.find((p) => p.key === 'month') || plans[plans.length - 1];
+  // Pool acc VIP do admin cung cấp: user chỉ thấy SỐ LƯỢNG acc đang hoạt động.
+  let vipPool = { total: 0, active: 0 };
+  try { vipPool = await vipPoolStatus(); } catch { vipPool = { total: 0, active: 0 }; }
   res.json({
     isVip: isVip(req.user.id),
     vipExpiresAt: vipExpiresAt(req.user.id),
@@ -108,6 +112,8 @@ r.get('/status', (req, res) => {
     // Giữ 2 field cũ (gói tháng) để tương thích ngược.
     priceVnd: month?.priceVnd ?? 0,
     durationDays: month?.days ?? 30,
+    vipActiveCount: vipPool.active,
+    vipTotalCount: vipPool.total,
   });
 });
 

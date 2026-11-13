@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { requireAuth } from '../auth.js';
+import { requireAuth, requireAdmin } from '../auth.js';
 import {
   listAccounts as localAccounts, upsertAccount, deleteAccountRow, db, now,
   createBindCode, getBindCode, finishBindCode, failBindCode, auditLog,
 } from '../db.js';
 import * as muse from '../muse.js';
-import { vipAccountTodayCount, getVipDailyLimit } from '../lib/accounts.js';
+import { vipAccountTodayCount, getVipDailyLimit, vipPoolStatus } from '../lib/accounts.js';
 
 const r = Router();
 
@@ -170,8 +170,7 @@ r.get('/', requireAuth, async (req, res) => {
   const local = localAccounts(req.user.role === 'admin' ? null : req.user.id);
   const counts = jobCountsByAccount();
 
-  const accounts = local.map((a) => {
-    const up = a.upstream_id ? upMap.get(a.upstream_id) : null;
+  const accounts = local.map((a) => {    const up = a.upstream_id ? upMap.get(a.upstream_id) : null;
     let stored = null;
     try { stored = a.quota ? JSON.parse(a.quota) : null; } catch { stored = null; }
     const quota = parseQuota(up?.quota ?? stored);
@@ -206,6 +205,10 @@ r.get('/', requireAuth, async (req, res) => {
   const alive = accounts.filter((a) => a.status !== 'missing');
   const usable = alive.filter((a) => a.status === 'ok');
   const withPct = usable.filter((a) => a.quota?.weeklyLeftPct != null);
+  // Pool acc VIP do admin cung cấp: user thường không thấy từng acc, chỉ
+  // thấy SỐ LƯỢNG acc đang hoạt động (để biết còn acc để tạo video/ảnh).
+  let vipPool = { total: 0, active: 0 };
+  try { vipPool = await vipPoolStatus(); } catch { vipPool = { total: 0, active: 0 }; }
   const summary = {
     total: alive.length,
     usable: usable.length,
@@ -223,6 +226,9 @@ r.get('/', requireAuth, async (req, res) => {
     // Tổng số video/ảnh đã tạo xong (mọi tài khoản cộng lại)
     totalVideos: accounts.reduce((s, a) => s + (a.videoCount || 0), 0),
     totalImages: accounts.reduce((s, a) => s + (a.imageCount || 0), 0),
+    // Pool acc VIP do admin cung cấp (chỉ số lượng, không lộ chi tiết acc).
+    vipActiveCount: vipPool.active,
+    vipTotalCount: vipPool.total,
   };
 
   res.json({ accounts, summary, upstreamUp: upstream.length > 0 });
@@ -286,7 +292,9 @@ r.post('/', requireAuth, async (req, res) => {
 r.patch('/:id/proxy', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
-  if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
+  // Acc do admin thêm (kho chung / acc VIP) chỉ admin mới được thao tác;
+  // user thường chỉ được thao tác acc của chính mình.
+  if (req.user.role !== 'admin' && row.owner_id !== req.user.id) {
     return res.status(403).json({ error: 'Không có quyền thao tác tài khoản này' });
   }
   const { proxy } = req.body || {};
@@ -304,8 +312,8 @@ r.patch('/:id/proxy', requireAuth, async (req, res) => {
 
 /* Thêm tài khoản này vào pool prompt-writer: các lần viết prompt (chat,
  * phân tích ảnh, kịch bản và chia cảnh Film Studio) sẽ xoay vòng qua các
- * tài khoản trong pool khi user không có acc của riêng mình. */
-r.post('/:id/prompt-writer', requireAuth, (req, res) => {
+ * tài khoản trong pool khi user không có acc của riêng mình. Chỉ admin. */
+r.post('/:id/prompt-writer', requireAuth, requireAdmin, (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
   db.prepare('UPDATE accounts SET prompt_writer = 1 WHERE id = ?').run(row.id);
@@ -313,8 +321,8 @@ r.post('/:id/prompt-writer', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-/* Gỡ tài khoản khỏi pool prompt-writer (lũy tiến: đã gỡ rồi thì vẫn ok). */
-r.delete('/:id/prompt-writer', requireAuth, (req, res) => {
+/* Gỡ tài khoản khỏi pool prompt-writer (lũy tiến: đã gỡ rồi thì vẫn ok). Chỉ admin. */
+r.delete('/:id/prompt-writer', requireAuth, requireAdmin, (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
   if (row) {
     db.prepare('UPDATE accounts SET prompt_writer = 0 WHERE id = ?').run(row.id);
@@ -326,7 +334,7 @@ r.delete('/:id/prompt-writer', requireAuth, (req, res) => {
 r.post('/:id/test', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
-  if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && row.owner_id !== req.user.id) {
     return res.status(403).json({ error: 'Không có quyền thao tác tài khoản này' });
   }
   try {
@@ -349,7 +357,7 @@ r.post('/:id/test', requireAuth, async (req, res) => {
 r.post('/:id/keepalive', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
-  if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && row.owner_id !== req.user.id) {
     return res.status(403).json({ error: 'Không có quyền thao tác tài khoản này' });
   }
   try {
@@ -362,7 +370,7 @@ r.post('/:id/keepalive', requireAuth, async (req, res) => {
 r.delete('/:id', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
-  if (row.owner_id && row.owner_id !== req.user.id && req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && row.owner_id !== req.user.id) {
     return res.status(403).json({ error: 'Không có quyền xóa tài khoản này' });
   }
   if (row.upstream_id) {
