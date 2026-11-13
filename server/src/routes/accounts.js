@@ -19,18 +19,26 @@ function parseQuota(q) {
   if (!q.found && q.weekly_used_pct == null) return null;
 
   const raw = String(q.raw || '');
+  // Chỉ tìm trong phần hạn mức tuần (trước tiêu đề "Additional tokens")
+  // để số token còn của gói bổ sung không bị nhầm thành hạn mức tuần.
+  const weeklyRaw = raw.split(/(?:Additional|Extra)\s+tokens|Token\s+bổ\s+sung|額外|额外/i)[0];
   // Số tokens còn lại: ưu tiên dạng tiếng Trung "剩余 309 亿个词元",
-  // dự phòng dạng tiếng Anh "309 billion tokens remaining".
-  const tokens = raw.match(/剩余\s*([\d.]+\s*[亿万]?)\s*个词元/)
-    || raw.match(/([\d.]+\s*(?:billion|million|tỷ|triệu)?)\s*tokens?\s*(?:remaining|left|remained)/i);
+  // dự phòng dạng tiếng Anh "309 billion tokens remaining",
+  // và dạng tiếng Việt "còn 2,9 tỷ token".
+  const tokens = weeklyRaw.match(/剩余\s*([\d.]+\s*[亿万]?)\s*个词元/)
+    || weeklyRaw.match(/([\d.,]+\s*(?:billion|million|tỷ|triệu)?)\s*tokens?\s*(?:remaining|left|remained)/i)
+    || weeklyRaw.match(/còn\s+([\d.,]+\s*(?:tỷ|triệu)?\s*tokens?)/i);
 
   const usedPct = typeof q.weekly_used_pct === 'number' ? q.weekly_used_pct : null;
+  // "còn 2,9 tỷ token" -> "2,9 tỷ token" (tránh lặp "còn" khi web hiển thị
+  // "Tokens thêm còn {extraLeft}"); giá trị tiếng Anh không có "còn" nên giữ nguyên.
+  const extraLeft = q.extra_left ? String(q.extra_left).replace(/^còn\s+/i, '') : null;
   return {
     weeklyUsedPct: usedPct,
     weeklyLeftPct: usedPct != null ? Math.max(0, Math.min(100, 100 - usedPct)) : null,
     weeklyReset: q.weekly_reset || null,
     tokensLeft: tokens ? tokens[1].replace(/\s+/g, '') : null,
-    extraLeft: q.extra_left || null,
+    extraLeft,
     extraUsedPct: typeof q.extra_used_pct === 'number' ? q.extra_used_pct : null,
     plan: q.plan || null,
     checkedAt: q.checked_at || null,
