@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Sparkles, Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film, Layers, Users, Crown, User } from 'lucide-react';
+import { Workflow, Clapperboard, KeyRound, LogOut, ShieldCheck, Film, Layers, Users, Crown, User } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../store/auth.jsx';
 
@@ -28,10 +28,11 @@ export default function Layout() {
       <aside className="relative z-20 flex w-[84px] shrink-0 flex-col items-center border-r border-white/[0.05] bg-[#0b0f19] py-4">
         <button
           onClick={() => nav('/canvas')}
-          title="Aimi Muse Studio"
-          className="mint-btn grid h-11 w-11 place-items-center rounded-2xl"
+          title="Aimimuse"
+          className="flex flex-col items-center gap-1"
         >
-          <Sparkles size={20} strokeWidth={2.2} />
+          <img src="/logo.png" alt="Aimimuse" className="h-11 w-11 rounded-2xl object-cover ring-1 ring-white/10" />
+          <span className="text-[10px] font-semibold leading-none text-mist-200">Aimimuse</span>
         </button>
 
         <nav className="mt-8 flex w-full flex-col items-center gap-1.5 px-2">
