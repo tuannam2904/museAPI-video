@@ -10,6 +10,7 @@ import {
   getSetting,
 } from '../db.js';
 import * as muse from '../muse.js';
+import { pickAccountForUser, PICK_ERRORS } from '../lib/accounts.js';
 
 const r = Router();
 
@@ -128,6 +129,19 @@ r.post('/videos', requireAuth, async (req, res) => {
   const limitErr = checkUserLimits(req.user.id, cost);
   if (limitErr) return res.status(400).json({ error: limitErr });
 
+  // Chọn tài khoản Muse: VIP → acc VIP của admin; thường → chỉ acc của chính user.
+  // Đặt sau kiểm tra số dư/hạn mức và trước khi tạo job/trừ điểm.
+  const pick = await pickAccountForUser(req.user.id, {
+    vip: req.body?.vip === true,
+    accountId: req.body?.accountId || null,
+  });
+  if (pick.error) {
+    const e = PICK_ERRORS[pick.error] || { status: 400, message: 'Không chọn được tài khoản' };
+    return res.status(e.status).json({ error: e.message });
+  }
+  params.accountMode = pick.mode;
+  params.accountId = pick.platformId;
+
   const job = createJob(req.user.id, 'video', String(prompt).trim(), params, cost);
   addCredits(req.user.id, -cost, 'Tạo tác vụ video', job.id);
 
@@ -138,6 +152,7 @@ r.post('/videos', requireAuth, async (req, res) => {
       model,
       duration: dur,
       size: params.size,
+      account_id: pick.upstreamId,
     };
     if (refs.length) payload.images = refs;
     if (extra) payload.extra = String(extra).slice(0, 500);
@@ -172,12 +187,25 @@ r.post('/images', requireAuth, async (req, res) => {
   const limitErr = checkUserLimits(req.user.id, cost);
   if (limitErr) return res.status(400).json({ error: limitErr });
 
+  // Chọn tài khoản Muse: VIP → acc VIP của admin; thường → chỉ acc của chính user.
+  // Đặt sau kiểm tra số dư/hạn mức và trước khi tạo job/trừ điểm.
+  const pick = await pickAccountForUser(req.user.id, {
+    vip: req.body?.vip === true,
+    accountId: req.body?.accountId || null,
+  });
+  if (pick.error) {
+    const e = PICK_ERRORS[pick.error] || { status: 400, message: 'Không chọn được tài khoản' };
+    return res.status(e.status).json({ error: e.message });
+  }
+  params.accountMode = pick.mode;
+  params.accountId = pick.platformId;
+
   const job = createJob(req.user.id, 'image', String(prompt).trim(), params, cost);
   addCredits(req.user.id, -cost, 'Tạo tác vụ hình ảnh', job.id);
 
   try {
     const refs = normalizeRefs(images);
-    const payload = { prompt: String(prompt).trim(), model: 'muse-image', size: params.size };
+    const payload = { prompt: String(prompt).trim(), model: 'muse-image', size: params.size, account_id: pick.upstreamId };
     if (refs.length) payload.images = refs;
 
     const out = await muse.createImageTask(payload);

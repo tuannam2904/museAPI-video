@@ -8,6 +8,7 @@ import { db, uid, now, createJob, getJob, updateJob, addCredits, priceOf } from 
 import * as muse from '../muse.js';
 import { normalizeRefs, checkUserLimits } from './generate.js';
 import { chatWithPromptWriter } from '../lib/promptWriter.js';
+import { pickAccountForUser, PICK_ERRORS, isVipUser } from '../lib/accounts.js';
 
 const r = Router();
 
@@ -279,10 +280,15 @@ async function createSceneImage(userId, scene, aspect) {
   if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo ảnh cần ${cost})`);
   const limitErr = checkUserLimits(userId, cost);
   if (limitErr) throw new Error(limitErr);
+  // Chủ phim có VIP → dùng acc VIP của admin; không VIP → chỉ acc của chính chủ phim.
+  const pick = await pickAccountForUser(userId, { vip: isVipUser(userId) });
+  if (pick.error) throw new Error((PICK_ERRORS[pick.error] || {}).message || 'Không chọn được tài khoản');
+  params.accountMode = pick.mode;
+  params.accountId = pick.platformId;
   const job = createJob(userId, 'image', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo ảnh cảnh', job.id);
   try {
-    const payload = { prompt, model: 'muse-image', size: params.size };
+    const payload = { prompt, model: 'muse-image', size: params.size, account_id: pick.upstreamId };
     if (refs.length) payload.images = refs;
     const out = await muse.createImageTask(payload);
     const upstreamId = out?.id || out?.task_id;
@@ -312,11 +318,16 @@ async function createSceneVideo(userId, project, scene) {
   if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo video cần ${cost})`);
   const limitErr = checkUserLimits(userId, cost);
   if (limitErr) throw new Error(limitErr);
+  // Chủ phim có VIP → dùng acc VIP của admin; không VIP → chỉ acc của chính chủ phim.
+  const pick = await pickAccountForUser(userId, { vip: isVipUser(userId) });
+  if (pick.error) throw new Error((PICK_ERRORS[pick.error] || {}).message || 'Không chọn được tài khoản');
+  params.accountMode = pick.mode;
+  params.accountId = pick.platformId;
   const job = createJob(userId, 'video', prompt, params, cost);
   addCredits(userId, -cost, 'Film: tạo video cảnh', job.id);
   try {
     const refs = normalizeRefs(params.images);
-    const payload = { prompt, model: 'muse-video', duration: params.duration, size: params.size };
+    const payload = { prompt, model: 'muse-video', duration: params.duration, size: params.size, account_id: pick.upstreamId };
     if (refs.length) payload.images = refs;
     const out = await muse.createVideo(payload);
     const upstreamId = out?.id || out?.task_id;
@@ -594,10 +605,18 @@ r.post('/films/:id/characters/:charId/portrait', requireAuth, async (req, res) =
   if (!user || user.credits < cost) return res.status(502).json({ error: `Không đủ điểm (tạo chân dung cần ${cost})` });
   const limitErr = checkUserLimits(req.user.id, cost);
   if (limitErr) return res.status(400).json({ error: limitErr });
+  // Chủ phim có VIP → dùng acc VIP của admin; không VIP → chỉ acc của chính chủ phim.
+  const pick = await pickAccountForUser(req.user.id, { vip: isVipUser(req.user.id) });
+  if (pick.error) {
+    const e = PICK_ERRORS[pick.error] || { status: 400, message: 'Không chọn được tài khoản' };
+    return res.status(e.status).json({ error: e.message });
+  }
+  params.accountMode = pick.mode;
+  params.accountId = pick.platformId;
   const job = createJob(req.user.id, 'image', prompt, params, cost);
   addCredits(req.user.id, -cost, 'Film: tạo chân dung nhân vật', job.id);
   try {
-    const out = await muse.createImageTask({ prompt, model: 'muse-image', size: params.size });
+    const out = await muse.createImageTask({ prompt, model: 'muse-image', size: params.size, account_id: pick.upstreamId });
     const upstreamId = out?.id || out?.task_id;
     if (!upstreamId) throw new Error('Upstream không trả về ID tác vụ');
     updateJob(job.id, { upstream_id: upstreamId, status: 'processing', progress: 10 });

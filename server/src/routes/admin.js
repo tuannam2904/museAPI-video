@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { requireAuth, requireAdmin, publicUser, createUser, hashPassword } from '../auth.js';
-import { db, addCredits, getSettings, setSetting, upsertAccount, auditLog } from '../db.js';
+import { db, addCredits, getSettings, setSetting, upsertAccount, auditLog, grantVip, revokeVip } from '../db.js';
 import { mediaStats, mediaStatsForUser, cleanupMedia } from '../mediaCleanup.js';
 import { MEDIA_DIR } from '../config.js';
 import * as muse from '../muse.js';
@@ -38,7 +38,7 @@ function userStats(u, media) {
 }
 
 function publicUserFull(u, media) {
-  return { ...publicUser(u), limits: userLimits(u), stats: userStats(u, media) };
+  return { ...publicUser(u), vipExpiresAt: u.vip_expires_at ?? null, limits: userLimits(u), stats: userStats(u, media) };
 }
 
 r.get('/overview', (_req, res) => {  const users = db.prepare("SELECT COUNT(*) n FROM users").get().n;
@@ -96,7 +96,7 @@ r.get('/users/:id', (req, res) => {
     'SELECT id, title, status, created_at FROM film_projects WHERE user_id = ? ORDER BY created_at DESC LIMIT 20'
   ).all(user.id);
   res.json({
-    user: { ...publicUser(user), limits: userLimits(user) },
+    user: { ...publicUser(user), vipExpiresAt: user.vip_expires_at ?? null, limits: userLimits(user) },
     stats: userStats(user, media),
     jobs,
     ledger,
@@ -228,6 +228,81 @@ r.get('/audit', (req, res) => {
   res.json({ entries });
 });
 
+/* ------------------------------ VIP ------------------------------ */
+/* Danh sách đơn VIP (lọc theo trạng thái / tìm theo email user). */
+r.get('/vip/orders', (req, res) => {
+  const status = String(req.query.status || '').trim();
+  const q = String(req.query.q || '').trim();
+  const where = [];
+  const args = [];
+  if (['pending', 'paid', 'expired', 'underpaid', 'canceled'].includes(status)) { where.push('v.status = ?'); args.push(status); }
+  if (q) { where.push('u.email LIKE ?'); args.push(`%${q}%`); }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = db.prepare(
+    `SELECT v.*, u.email AS user_email FROM vip_orders v
+     LEFT JOIN users u ON u.id = v.user_id ${w} ORDER BY v.created_at DESC LIMIT 100`
+  ).all(...args);
+  res.json({ orders: rows });
+});
+
+/* Cấp VIP tay cho user (cộng thêm `days` ngày, nối tiếp hạn hiện tại nếu còn). */
+r.post('/vip/grant', (req, res) => {
+  const { userId, days } = req.body || {};
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!user) return res.status(404).json({ error: 'Người dùng không tồn tại' });
+  const d = Number(days);
+  if (!Number.isFinite(d) || d <= 0) return res.status(400).json({ error: 'Số ngày VIP không hợp lệ' });
+  const exp = grantVip(user.id, d);
+  auditLog(req.user.id, 'vip_grant', 'user', user.id, `Cấp VIP ${d} ngày cho ${user.email} (hết hạn ${new Date(exp).toISOString()})`);
+  res.json({ ok: true, vipExpiresAt: exp });
+});
+
+/* Thu hồi quyền VIP của user. */
+r.post('/vip/revoke', (req, res) => {
+  const { userId } = req.body || {};
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!user) return res.status(404).json({ error: 'Người dùng không tồn tại' });
+  revokeVip(user.id);
+  auditLog(req.user.id, 'vip_revoke', 'user', user.id, `Thu hồi VIP của ${user.email}`);
+  res.json({ ok: true });
+});
+
+/* Xác nhận tay một đơn VIP (pending/underpaid/expired): đánh dấu đã trả + cấp VIP theo số ngày của đơn. */
+r.post('/vip/orders/:id/confirm', (req, res) => {
+  const order = db.prepare('SELECT * FROM vip_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Đơn không tồn tại' });
+  if (order.status === 'paid') return res.status(400).json({ error: 'Đơn đã được thanh toán' });
+  if (order.status === 'canceled') return res.status(400).json({ error: 'Đơn đã bị hủy' });
+  const ts = Date.now();
+  db.prepare("UPDATE vip_orders SET status = 'paid', paid_at = ?, note = ? WHERE id = ?")
+    .run(ts, 'Admin xác nhận tay', order.id);
+  const exp = grantVip(order.user_id, order.duration_days);
+  const user = db.prepare('SELECT email FROM users WHERE id = ?').get(order.user_id);
+  auditLog(req.user.id, 'vip_confirm', 'vip_order', order.id,
+    `Xác nhận tay đơn VIP ${order.code} (${order.amount_vnd}đ, ${order.duration_days} ngày) cho ${user?.email || order.user_id}`);
+  res.json({ ok: true, vipExpiresAt: exp });
+});
+
+/* Danh sách tài khoản Muse (kèm cờ VIP). */
+r.get('/accounts', (req, res) => {
+  const rows = db.prepare(
+    `SELECT a.*, u.email AS owner_email FROM accounts a
+     LEFT JOIN users u ON u.id = a.owner_id ORDER BY a.created_at DESC LIMIT 200`
+  ).all();
+  res.json({ accounts: rows });
+});
+
+/* Đánh dấu / bỏ đánh dấu một tài khoản Muse là VIP (do admin cung cấp). */
+r.patch('/accounts/:id/vip', (req, res) => {
+  const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
+  const vip = req.body?.vip === true || req.body?.vip === 1 || req.body?.vip === '1';
+  db.prepare('UPDATE accounts SET vip = ? WHERE id = ?').run(vip ? 1 : 0, row.id);
+  auditLog(req.user.id, 'vip_account', 'account', row.id,
+    `${vip ? 'Đánh dấu' : 'Bỏ đánh dấu'} tài khoản Muse "${row.label}" là VIP`);
+  res.json({ ok: true, account: { ...row, vip: vip ? 1 : 0 } });
+});
+
 r.post('/users', (req, res) => {
   const { email, password, name, role } = req.body || {};
   if (!email || !String(email).includes('@')) return res.status(400).json({ error: 'Email không hợp lệ' });
@@ -328,7 +403,8 @@ r.post('/media-cleanup', (_req, res) => {
   }
 });
 r.patch('/settings', (req, res) => {
-  const allow = ['siteName', 'signupCredits', 'priceVideoBase', 'priceVideoPerSecond', 'priceImage', 'allowRegister', 'notice', 'mediaMaxMB', 'mediaRetentionDays', 'mediaGlobalMaxMB'];
+  const allow = ['siteName', 'signupCredits', 'priceVideoBase', 'priceVideoPerSecond', 'priceImage', 'allowRegister', 'notice', 'mediaMaxMB', 'mediaRetentionDays', 'mediaGlobalMaxMB',
+    'vipPriceDayVnd', 'vipPriceWeekVnd', 'vipPriceMonthVnd', 'sepayMailApiUrl', 'sepayMailApiToken', 'sepayMbAccountNo', 'sepayMbAccountName', 'sepayMbBin', 'sepayCodePrefix', 'vipOrderTtlMin', 'vipPollSeconds'];
   const changed = [];
   for (const [k, v] of Object.entries(req.body || {})) {
     if (allow.includes(k)) { setSetting(k, v); changed.push(k); }
