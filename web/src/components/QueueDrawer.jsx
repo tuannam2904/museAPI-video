@@ -125,7 +125,7 @@ export default function QueueDrawer({ open, onClose, prompt, duration, size }) {
           </div>
 
           <p className="mt-2 font-mono text-[10px] text-mist-400">
-            Mỗi lần {10 + 2 * (duration || 5)} điểm · Tổng {maxRuns} lần · Khoảng {(10 + 2 * (duration || 5)) * maxRuns} điểm
+            Tổng {maxRuns} lần
           </p>
         </div>
 

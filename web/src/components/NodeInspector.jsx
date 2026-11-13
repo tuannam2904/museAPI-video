@@ -48,7 +48,6 @@ export default function NodeInspector({
   const Icon = isText ? Type : isImage ? ImageIcon : Video;
   const running = node.status === 'running';
   const failed = node.status === 'failed';
-  const cost = isImage ? 5 : isVideo ? 10 + 2 * (node.duration || 5) : 0;
 
   // Ảnh tham chiếu nối vào nút video (bỏ qua đầu vào đã tắt): dùng để phân tích.
   const imageInputs = isVideo
@@ -202,7 +201,7 @@ export default function NodeInspector({
             ))}
           </div>
           <span className="ml-auto font-mono text-[10.5px] text-mist-400">
-            {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : (isVideo && node.vip ? 'VIP · không tốn điểm' : `${cost} điểm`)}
+            {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : (isVideo && node.vip ? 'VIP · không tốn điểm' : '')}
           </span>
         </div>
       )}
