@@ -43,16 +43,17 @@ export default function Accounts() {
   const [q, setQ] = useState('');
   const [expandedId, setExpandedId] = useState(null);
 
-  // Đặt / gỡ tài khoản chuyên viết prompt (chỉ một tài khoản được chỉ định)
+  // Thêm / gỡ tài khoản khỏi nhóm viết prompt — nhiều tài khoản có thể cùng
+  // viết prompt, yêu cầu xoay vòng giữa các tài khoản trong nhóm
   const togglePromptWriter = async (acc) => {
     setBusyId(acc.id);
     try {
       if (acc.isPromptWriter) {
         await api.clearPromptWriter(acc.id);
-        toast('Đã gỡ vai trò viết prompt', 'ok');
+        toast('Đã gỡ khỏi nhóm viết prompt', 'ok');
       } else {
         await api.setPromptWriter(acc.id);
-        toast(`«${acc.label}» sẽ viết prompt cho mọi tính năng`, 'ok');
+        toast(`«${acc.label}» đã vào nhóm viết prompt — yêu cầu sẽ xoay vòng giữa các tài khoản trong nhóm`, 'ok');
       }
       await load();
     } catch (e) {
@@ -351,7 +352,7 @@ function AccountRow({ a, busy, expanded, onToggleExpand, onTest, onKeepalive, on
           <IconBtn title="Duy trì" disabled={busy} onClick={onKeepalive}><Activity size={14} /></IconBtn>
           <IconBtn title="Proxy" disabled={busy} onClick={onProxy}><Globe size={14} /></IconBtn>
           <IconBtn
-            title={a.isPromptWriter ? 'Gỡ vai trò viết prompt' : 'Đặt làm tài khoản viết prompt'}
+            title={a.isPromptWriter ? 'Gỡ khỏi nhóm viết prompt' : 'Thêm vào nhóm viết prompt'}
             disabled={busy}
             active={!!a.isPromptWriter}
             onClick={onPromptWriter}
