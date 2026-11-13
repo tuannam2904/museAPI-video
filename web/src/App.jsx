@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './store/auth.jsx';
 import { ToastProvider, Spinner } from './components/ui.jsx';
+import { ConfirmDialogProvider } from './components/ConfirmDialog.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Canvas from './pages/Canvas.jsx';
@@ -43,6 +44,7 @@ export default function App() {
 
   return (
     <ToastProvider>
+      <ConfirmDialogProvider>
       <Routes>
         <Route
           path="/login"
@@ -76,6 +78,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to={user ? '/canvas' : '/login'} replace />} />
       </Routes>
+      </ConfirmDialogProvider>
     </ToastProvider>
   );
 }
