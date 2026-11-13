@@ -28,6 +28,8 @@ const nearestTotal = (target) => VALID_TOTALS.reduce((best, v) =>
 const POLL_MS = 5000;
 const POLL_MAX_ROUNDS = 360; // 30 phút — tạo video từng cảnh có thể lâu
 const STITCH_MAX_ROUNDS = 120; // 10 phút
+// Kho nhân vật dùng chung với tab Nhân vật / Video hàng loạt (localStorage).
+const CHAR_STORE_KEY = 'xm_characters';
 
 const fmtClock = () => {
   const d = new Date();
@@ -59,6 +61,10 @@ export default function CanvasAgentPanel({
   const [filmDone, setFilmDone] = useState(false);
   const [error, setError] = useState(null);
   const [failedStep, setFailedStep] = useState(null); // 'generate' | 'stitch' | null
+  // Nhân vật tham chiếu: chọn từ kho nhân vật dùng chung (tab Nhân vật) để
+  // storyboard viết prompt ảnh nhắc đúng tên + ngoại hình nhân vật.
+  const [chars, setChars] = useState([]);
+  const [pickedCharIds, setPickedCharIds] = useState([]);
   const logRef = useRef(null);
   const cancelledRef = useRef(false);
   const filmIdRef = useRef(null);
@@ -80,6 +86,15 @@ export default function CanvasAgentPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [logs]);
 
+  // Nạp nhân vật tham chiếu từ kho dùng chung mỗi khi mở panel
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const list = JSON.parse(localStorage.getItem(CHAR_STORE_KEY) || '[]');
+      setChars(Array.isArray(list) ? list : []);
+    } catch { setChars([]); }
+  }, [open]);
+
   // Hủy poll khi đóng panel / unmount
   useEffect(() => () => { cancelledRef.current = true; }, []);
 
@@ -95,6 +110,7 @@ export default function CanvasAgentPanel({
     const nodes = createNodesFromShots(
       sceneList.map((s) => ({
         prompt: s.videoPrompt || s.description || '',
+        camera: s.camera || '',
         shot: s.order + 1,
         duration: s.duration || duration,
       })),
@@ -191,6 +207,16 @@ export default function CanvasAgentPanel({
       if (!id) throw new Error('Tạo phim thất bại: máy chủ không trả về ID phim');
       setFilmId(id);
       pushLog(`Đã tạo phim (ID ${id})`, 'ok');
+
+      // Gắn nhân vật tham chiếu đã chọn vào phim TRƯỚC khi chia cảnh, để
+      // storyboard viết prompt ảnh nhắc đúng tên + ngoại hình nhân vật.
+      const picked = chars.filter((c) => pickedCharIds.includes(c.id));
+      for (const c of picked) {
+        await api.addFilmCharacter(id, {
+          name: c.name, description: c.note || '', photos: c.photos || [],
+        });
+      }
+      if (picked.length) pushLog(`Đã gắn ${picked.length} nhân vật tham chiếu: ${picked.map((c) => c.name).join(', ')}`, 'ok');
 
       pushLog('Đang viết kịch bản…', 'info');
       await api.filmScript(id);
@@ -391,6 +417,49 @@ export default function CanvasAgentPanel({
             Sẽ tạo <span className="font-semibold text-white">{shots} cảnh</span>
             <span className="text-mist-400"> · {duration}s mỗi cảnh</span>
           </p>
+
+          {/* Nhân vật tham chiếu: chọn từ kho nhân vật dùng chung */}
+          <div>
+            <p className="mb-1.5 text-[12px] font-medium text-mist-300">Nhân vật tham chiếu (tùy chọn)</p>
+            {chars.length === 0 ? (
+              <p className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-[12px] leading-relaxed text-mist-400">
+                Chưa có nhân vật — tạo nhân vật ở tab Nhân vật trước, rồi chọn ở đây để storyboard viết prompt ảnh nhắc đúng nhân vật.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {chars.map((c) => {
+                  const on = pickedCharIds.includes(c.id);
+                  const photo = c.photos?.[0]?.url;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setPickedCharIds((l) => (on ? l.filter((x) => x !== c.id) : [...l, c.id]))}
+                      disabled={running}
+                      className={clsx(
+                        'flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition',
+                        on ? 'border-brand-400/50 bg-brand-400/10' : 'border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.06]'
+                      )}
+                    >
+                      {photo ? (
+                        <img src={photo} alt={c.name} className="h-8 w-8 shrink-0 rounded-lg object-cover ring-1 ring-white/10" />
+                      ) : (
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-800 text-[13px] font-semibold text-brand-300 ring-1 ring-white/10">
+                          {c.name?.[0] || '?'}
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-white">{c.name}</span>
+                        {c.note && <span className="block truncate text-[11px] text-mist-400">{c.note}</span>}
+                      </span>
+                      <span className={clsx('grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[11px]', on ? 'border-brand-400 bg-brand-400 text-[#06231c]' : 'border-white/20 text-transparent')}>
+                        ✓
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Hộp xác nhận nội tuyến (bắt buộc trước khi chạy) */}
           {confirmOpen && !running && (
