@@ -284,11 +284,38 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON admin_audit(created_at DESC);
 CREATE TABLE IF NOT EXISTS canvas_docs (
-  user_id    TEXT PRIMARY KEY,
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
   doc        TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_canvas_docs_user ON canvas_docs(user_id, updated_at DESC);
 `);
+
+/* Di trú Canvas 1 bảng/user → nhiều dự án/user: bảng cũ có user_id làm
+   khóa chính, bảng mới có id riêng. Chuyển dữ liệu cũ sang rồi xóa bảng cũ. */
+try {
+  const cols = db.prepare('PRAGMA table_info(canvas_docs)').all();
+  if (cols.length > 0 && !cols.some((c) => c.name === 'id')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS canvas_docs_new (
+        id         TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL,
+        doc        TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO canvas_docs_new (id, user_id, doc, created_at, updated_at)
+        SELECT 'c_' || lower(hex(randomblob(8))), user_id, doc, updated_at, updated_at FROM canvas_docs;
+      DROP TABLE canvas_docs;
+      ALTER TABLE canvas_docs_new RENAME TO canvas_docs;
+      CREATE INDEX IF NOT EXISTS idx_canvas_docs_user ON canvas_docs(user_id, updated_at DESC);
+    `);
+  }
+} catch (e) {
+  console.warn('[db] di trú canvas_docs thất bại (bỏ qua):', e?.message || e);
+}
 
 export const uid = (p = '') => p + crypto.randomBytes(9).toString('hex');
 export const now = () => Date.now();
