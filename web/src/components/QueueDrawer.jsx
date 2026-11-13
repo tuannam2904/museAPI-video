@@ -5,6 +5,7 @@ import {
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
 import { useToast } from './ui.jsx';
+import { useConfirmDialog } from './ConfirmDialog.jsx';
 
 const STATUS = {
   pending: { label: 'Chờ thực hiện', cls: 'bg-gold-400/15 text-gold-400' },
@@ -16,6 +17,7 @@ const STATUS = {
 
 export default function QueueDrawer({ open, onClose, prompt, duration, size }) {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(false);
@@ -208,8 +210,8 @@ export default function QueueDrawer({ open, onClose, prompt, duration, size }) {
             Dọn các mục đã xong
           </button>
           <button
-            onClick={() => {
-              if (!confirm('Xóa toàn bộ tác vụ trong hàng đợi?')) return;
+            onClick={async () => {
+              if (!(await confirmDialog('Xóa toàn bộ tác vụ trong hàng đợi?', { dontAskKey: 'queue-clear-all' }))) return;
               act(() => api.clearQueueAll(), 'Đã xóa toàn bộ tác vụ');
             }}
             className="flex-1 rounded-lg border border-rose-500/30 py-2 text-[11.5px] text-rose-300 transition hover:bg-rose-500/10"
