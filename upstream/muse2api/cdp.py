@@ -32,6 +32,11 @@ class CDP:
                     msg = json.loads(self.ws.recv())
                 except websocket.WebSocketTimeoutException:
                     continue
+                except websocket.WebSocketConnectionClosedException:
+                    # Socket da chet: bao ngay, dung cho het timeout roi
+                    # moi gia vo la "timeout" (loi nay lam start() tuong
+                    # trinh duyet con song trong khi _open_page se that bai).
+                    raise
                 except Exception:  # noqa: BLE001
                     continue
                 if msg.get("id") == mid:
