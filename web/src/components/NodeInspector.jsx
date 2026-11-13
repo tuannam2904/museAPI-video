@@ -17,10 +17,10 @@ const DURATIONS = [5, 8, 10];
 const inputName = (n) => n.label
   || (n.type === 'image' ? 'Hình ảnh' : n.type === 'text' ? 'Văn bản' : n.type === 'group' ? 'Nhóm' : 'Nút');
 
-/* Bảng cấu hình của nút ảnh/video — bảng NGANG: 3 cột trong một hàng.
-   - Cột trái (câu lệnh): tên nút + ô nhập prompt + "Nhờ Muse viết prompt".
-   - Cột giữa: Đầu vào Ở TRÊN, Thông số Ở DƯỚI.
-   - Cột phải: tạo / tải lên / xóa.
+/* Bảng cấu hình của nút ảnh/video — xếp dọc, rộng toàn bộ:
+   - Hàng trên (góc trái): Đầu vào — thay cho tên nút, để ô nhập prompt rộng hơn.
+   - Giữa: ô nhập câu lệnh rộng toàn bộ + "Nhờ Muse viết prompt".
+   - Hàng dưới: thời gian + tỉ lệ (trái), tạo / tải lên / xóa (phải).
    Nút văn bản KHÔNG dùng bảng này nữa — nhấn vào là nhập trực tiếp trong nút.
    - Nút ảnh: câu lệnh + tỉ lệ + "Tạo ảnh" (tạo ngay trong nút này) hoặc tải ảnh lên.
    - Nút video: câu lệnh + thời lượng + tỉ lệ + "Tạo video"; lấy tất cả ảnh/văn bản
@@ -96,137 +96,135 @@ export default function NodeInspector({
       className="absolute z-30 rounded-2xl border p-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,.9)] backdrop-blur-xl"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="flex items-stretch gap-3">
-        {/* Cột trái: tên + câu lệnh + nhờ Muse viết prompt (ưu tiên, không bị ép dẹp) */}
-        <div className="flex min-w-[160px] flex-1 flex-col">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-ink-800">
-              <Icon size={13} className="text-brand-400" />
-            </span>
-            <input
-              value={node.label || ''}
-              onChange={(e) => onUpdate({ label: e.target.value })}
-              placeholder={isText ? 'Văn bản' : isImage ? 'Hình ảnh' : 'Video'}
-              className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-white outline-none placeholder:text-mist-400"
-            />
-            <span className={clsx(
-              'h-2 w-2 shrink-0 rounded-full',
-              running ? 'bg-amber-400 pulse-dot' : failed ? 'bg-rose-400' : node.mediaUrl ? 'bg-brand-400' : 'bg-mist-400'
+      {/* Hàng trên: Đầu vào ở góc trái (thay cho tên nút) + trạng thái + đóng */}
+      {!isText && (
+        <div className="mb-2 flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1.5 text-[11px] text-mist-400">Đầu vào ({inputs.length}):</p>
+            {inputs.length > 0 && (
+              <div className="flex flex-wrap items-start gap-2">
+                {inputs.map((n) => {
+                  const off = (node.disabledInputs || []).includes(n.id);
+                  return (
+                    <span key={n.id} className={clsx('flex w-[52px] flex-col items-center gap-1', off && 'opacity-40')}>
+                      <span className="group relative inline-flex items-center">
+                        {n.type === 'group' ? (
+                          <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10" title={inputName(n)}>
+                            <Layers size={11} className="text-brand-400" />
+                          </span>
+                        ) : n.type === 'image' && n.mediaUrl ? (
+                          <img src={n.mediaUrl} alt={inputName(n)} title={inputName(n)} className="h-7 w-9 rounded-md object-cover ring-1 ring-white/10" />
+                        ) : (
+                          <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10" title={inputName(n)}>
+                            <Type size={11} className="text-brand-400" />
+                          </span>
+                        )}
+                        <button
+                          onClick={() => onToggleInput?.(n.id)}
+                          title="Bật/Tắt đầu vào này"
+                          aria-label="Bật/Tắt đầu vào này"
+                          className="absolute -bottom-1 -left-1 grid h-4 w-4 place-items-center rounded-full bg-ink-800 text-mist-300 ring-1 ring-white/20 hover:text-white"
+                        >
+                          {off ? <X size={8} /> : <Check size={8} className="text-brand-400" />}
+                        </button>
+                        <button
+                          onClick={() => onRemoveLink(n.id)}
+                          title="Gỡ kết nối này"
+                          className="absolute -right-1 -top-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-ink-800 text-mist-400 ring-1 ring-white/20 hover:text-rose-400"
+                        >
+                          <Unlink size={8} />
+                        </button>
+                      </span>
+                      <span className="w-full truncate text-center text-[10px] leading-tight text-mist-300" title={inputName(n)}>
+                        {inputName(n)}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
             )}
-            />
-            <button onClick={onClose} className="shrink-0 rounded-md p-1 text-mist-400 hover:bg-white/5 hover:text-white">
-              <X size={13} />
-            </button>
           </div>
-          <textarea
-            value={node.text || ''}
-            onChange={(e) => onUpdate({ text: e.target.value })}
-            rows={2}
-            placeholder={isText
-              ? 'Nhập câu lệnh… (sẽ truyền vào nút ảnh/video nối từ đây)'
-              : isImage
-                ? 'Mô tả ảnh muốn tạo… (trống thì dùng câu lệnh nút văn bản nối vào)'
-                : 'Mô tả video muốn tạo… (trống thì dùng câu lệnh nút văn bản nối vào)'}
-            className="block w-full flex-1 resize-none rounded-xl border border-white/[0.07] bg-[#0d111c] px-3 py-2 text-[12.5px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
+          <span className={clsx(
+            'mt-1 h-2 w-2 shrink-0 rounded-full',
+            running ? 'bg-amber-400 pulse-dot' : failed ? 'bg-rose-400' : node.mediaUrl ? 'bg-brand-400' : 'bg-mist-400'
+          )}
           />
-          <button
-            onClick={assistPrompt}
-            disabled={assisting || !node.text?.trim()}
-            className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-400/30 text-[12px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
-          >
-            {assisting ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-            {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
+          <button onClick={onClose} className="shrink-0 rounded-md p-1 text-mist-400 hover:bg-white/5 hover:text-white">
+            <X size={13} />
           </button>
         </div>
+      )}
+      {isText && (
+        <div className="mb-2 flex items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-ink-800">
+            <Icon size={13} className="text-brand-400" />
+          </span>
+          <span className="min-w-0 flex-1 text-[13px] font-semibold text-white">{node.label || 'Văn bản'}</span>
+          <button onClick={onClose} className="shrink-0 rounded-md p-1 text-mist-400 hover:bg-white/5 hover:text-white">
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
-        {/* Cột giữa: Đầu vào Ở TRÊN, Thông số Ở DƯỚI (co lại trước khi màn hẹp) */}
+      {/* Câu lệnh: ô nhập prompt rộng toàn bộ */}
+      <textarea
+        value={node.text || ''}
+        onChange={(e) => onUpdate({ text: e.target.value })}
+        rows={3}
+        placeholder={isText
+          ? 'Nhập câu lệnh… (sẽ truyền vào nút ảnh/video nối từ đây)'
+          : isImage
+            ? 'Mô tả ảnh muốn tạo… (trống thì dùng câu lệnh nút văn bản nối vào)'
+            : 'Mô tả video muốn tạo… (trống thì dùng câu lệnh nút văn bản nối vào)'}
+        className="block w-full resize-none rounded-xl border border-white/[0.07] bg-[#0d111c] px-3 py-2 text-[12.5px] leading-relaxed text-mist-100 outline-none placeholder:text-mist-400/70 focus:border-brand-400/50"
+      />
+
+      {/* Nhờ Muse viết prompt bằng tiếng Việt */}
+      <button
+        onClick={assistPrompt}
+        disabled={assisting || !node.text?.trim()}
+        className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-400/30 text-[12px] text-brand-300 transition hover:bg-brand-400/10 disabled:opacity-40"
+      >
+        {assisting ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+        {assisting ? 'Muse đang viết…' : 'Nhờ Muse viết prompt'}
+      </button>
+
+      {/* Hàng dưới: thời gian + tỉ lệ (trái), tạo / tải lên / xóa (phải) */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {!isText && (
-          <div className="flex w-[210px] shrink flex-col">
-            {/* Đầu vào (chỉ nút ảnh/video): ảnh tham chiếu nối vào.
-                Mỗi đầu vào có tên nút (Ảnh 1, Ảnh 2…) + nút bật/tắt riêng
-                (lưu trên nút này, hoàn tác được); đầu vào bị tắt thì lúc tạo sẽ bỏ qua. */}
-            <div>
-              <p className="mb-1.5 text-[11px] text-mist-400">Đầu vào ({inputs.length}):</p>
-              {inputs.length > 0 && (
-                <div className="flex flex-wrap items-start gap-2">
-                  {inputs.map((n) => {
-                    const off = (node.disabledInputs || []).includes(n.id);
-                    return (
-                      <span key={n.id} className={clsx('flex w-[52px] flex-col items-center gap-1', off && 'opacity-40')}>
-                        <span className="group relative inline-flex items-center">
-                          {n.type === 'group' ? (
-                            <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10" title={inputName(n)}>
-                              <Layers size={11} className="text-brand-400" />
-                            </span>
-                          ) : n.type === 'image' && n.mediaUrl ? (
-                            <img src={n.mediaUrl} alt={inputName(n)} title={inputName(n)} className="h-7 w-9 rounded-md object-cover ring-1 ring-white/10" />
-                          ) : (
-                            <span className="grid h-7 w-9 place-items-center rounded-md bg-ink-800 ring-1 ring-white/10" title={inputName(n)}>
-                              <Type size={11} className="text-brand-400" />
-                            </span>
-                          )}
-                          <button
-                            onClick={() => onToggleInput?.(n.id)}
-                            title="Bật/Tắt đầu vào này"
-                            aria-label="Bật/Tắt đầu vào này"
-                            className="absolute -bottom-1 -left-1 grid h-4 w-4 place-items-center rounded-full bg-ink-800 text-mist-300 ring-1 ring-white/20 hover:text-white"
-                          >
-                            {off ? <X size={8} /> : <Check size={8} className="text-brand-400" />}
-                          </button>
-                          <button
-                            onClick={() => onRemoveLink(n.id)}
-                            title="Gỡ kết nối này"
-                            className="absolute -right-1 -top-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-ink-800 text-mist-400 ring-1 ring-white/20 hover:text-rose-400"
-                          >
-                            <Unlink size={8} />
-                          </button>
-                        </span>
-                        <span className="w-full truncate text-center text-[10px] leading-tight text-mist-300" title={inputName(n)}>
-                          {inputName(n)}
-                        </span>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            {/* Thông số */}
-            <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-2">
-              {isVideo && (
-                <div className="seg">
-                  {DURATIONS.map((d) => (
-                    <button key={d} onClick={() => onUpdate({ duration: d })} className={clsx((node.duration || 5) === d && 'on')} style={{ minWidth: 0, padding: '3px 10px', fontSize: 11 }}>
-                      {d}s
-                    </button>
-                  ))}
-                </div>
-              )}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+            {isVideo && (
               <div className="seg">
-                {(isImage ? IMAGE_SIZES : VIDEO_SIZES).map((sz) => (
-                  <button
-                    key={sz}
-                    onClick={() => (onSizeChange ? onSizeChange(sz) : onUpdate({ size: sz }))}
-                    className={clsx((node.size || (isImage ? '1:1' : '16:9')) === sz && 'on')}
-                    style={{ minWidth: 0, padding: '3px 10px', fontSize: 11 }}
-                  >
-                    {sz}
+                {DURATIONS.map((d) => (
+                  <button key={d} onClick={() => onUpdate({ duration: d })} className={clsx((node.duration || 5) === d && 'on')} style={{ minWidth: 0, padding: '3px 10px', fontSize: 11 }}>
+                    {d}s
                   </button>
                 ))}
               </div>
-              <span className="ml-auto font-mono text-[10.5px] text-mist-400">
-                {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : ''}
-              </span>
+            )}
+            <div className="seg">
+              {(isImage ? IMAGE_SIZES : VIDEO_SIZES).map((sz) => (
+                <button
+                  key={sz}
+                  onClick={() => (onSizeChange ? onSizeChange(sz) : onUpdate({ size: sz }))}
+                  className={clsx((node.size || (isImage ? '1:1' : '16:9')) === sz && 'on')}
+                  style={{ minWidth: 0, padding: '3px 10px', fontSize: 11 }}
+                >
+                  {sz}
+                </button>
+              ))}
             </div>
+            <span className="font-mono text-[10.5px] text-mist-400">
+              {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : ''}
+            </span>
           </div>
         )}
-
-        {/* Cột phải: tạo / tải lên / xóa */}
-        <div className="flex w-[80px] shrink-0 flex-col gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {isImage && (
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading || running}
-              className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] px-2 text-[12px] text-mist-200 transition hover:border-white/20 hover:text-white disabled:opacity-50"
+              className="flex h-9 items-center gap-1.5 rounded-xl border border-white/[0.08] px-3 text-[12px] text-mist-200 transition hover:border-white/20 hover:text-white disabled:opacity-50"
             >
               {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Tải lên
             </button>
@@ -235,7 +233,7 @@ export default function NodeInspector({
             <button
               onClick={onGenerate}
               disabled={busy || running}
-              className="mint-btn flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold disabled:opacity-50"
+              className="mint-btn flex h-9 items-center justify-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold disabled:opacity-50"
             >
               {busy || running ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
               {isImage ? 'Tạo ảnh' : 'Tạo video'}
@@ -244,7 +242,7 @@ export default function NodeInspector({
           <button
             onClick={onDelete}
             title="Xóa nút này"
-            className="grid h-9 w-full place-items-center rounded-xl border border-rose-500/30 text-rose-300 transition hover:bg-rose-500/10"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-rose-500/30 text-rose-300 transition hover:bg-rose-500/10"
           >
             <Trash2 size={13} />
           </button>
