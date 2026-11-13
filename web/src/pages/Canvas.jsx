@@ -3,7 +3,7 @@ import {
   Type, Image as ImageIcon, Video, Trash2, Maximize, Loader2, X, Sparkles, Wand2, Check,
   MousePointer2, Hand, ImagePlus, Expand, Clapperboard,
   Download, Undo2, Redo2, Menu, Palette, Eraser, Crosshair, Sun, Moon,
-  Group, Ungroup,
+  Group, Ungroup, ChevronDown, Plus, Pencil,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, getToken } from '../lib/api.js';
@@ -22,6 +22,7 @@ import CanvasAgentPanel from '../components/canvas/CanvasAgentPanel.jsx';
 import StoryboardDrawer from '../components/StoryboardDrawer.jsx';
 
 const STORE_KEY = 'xm_canvas_v1';
+const ACTIVE_KEY = 'xm_canvas_active_id'; // id dự án canvas đang mở
 const GRID_KEY = 'xm_canvas_grid';
 const NODE_W = 260;
 const NODE_H = 170;
@@ -98,6 +99,19 @@ export default function Canvas() {
   const saveStateRef = useRef('saved');
   saveStateRef.current = saveState;
   const serverLoadedRef = useRef(false); // server đã đọc xong chưa (chưa thì không PUT)
+  // Dự án canvas: mỗi user có nhiều dự án, mỗi dự án là 1 tài liệu riêng trên server
+  const [projects, setProjects] = useState([]); // [{ id, title, nodeCount, createdAt, updatedAt }]
+  const [activeId, setActiveId] = useState(() => {
+    try { return localStorage.getItem(ACTIVE_KEY) || null; } catch { return null; }
+  });
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false); // dropdown chọn dự án
+  const [newProjectName, setNewProjectName] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [renamingId, setRenamingId] = useState(null); // id dự án đang đổi tên
+  const [renameValue, setRenameValue] = useState('');
+  const [switching, setSwitching] = useState(false); // đang chuyển dự án
   const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
   const inspectorIdRef = useRef(null);
   inspectorIdRef.current = inspectorId;
@@ -194,13 +208,16 @@ export default function Canvas() {
   /* ---------------- 持久化 ---------------- */
   // Lưu localStorage ngay (debounce 400ms) + đồng bộ lên server khi đã đọc xong.
   // Server là nguồn lưu chính để đổi trình duyệt/máy khác vẫn thấy canvas.
+  // Lưu theo dự án đang mở (activeId); cập nhật lại mục dự án trong danh sách.
   useEffect(() => {
     setSaveState('saving');
     const t = setTimeout(async () => {
       try { localStorage.setItem(STORE_KEY, JSON.stringify(doc)); } catch { /* ignore */ }
-      if (!serverLoadedRef.current) return; // chưa đọc xong server: lần lưu sau sẽ đẩy lên
+      const id = activeIdRef.current;
+      if (!serverLoadedRef.current || !id) return; // chưa đọc xong server / chưa có dự án: lần lưu sau sẽ đẩy lên
       try {
-        await api.saveCanvas(doc);
+        const res = await api.saveCanvas(id, doc);
+        setProjects((list) => list.map((p) => (p.id === id ? { ...p, title: doc.title, nodeCount: (doc.nodes || []).length, updatedAt: res?.updatedAt || Date.now() } : p)));
         setSaveState('saved');
       } catch {
         setSaveState('error'); // localStorage đã lưu nên không mất dữ liệu; lần sửa sau thử lại
@@ -209,54 +226,76 @@ export default function Canvas() {
     return () => clearTimeout(t);
   }, [doc]);
 
-  // Đọc canvas từ server khi mở trang (chạy 1 lần). Bản server thắng nếu người
-  // dùng chưa sửa gì sau khi mở; nếu đã sửa thì giữ bản local (bản local thắng)
-  // và đẩy nó lên server. Server chưa có doc mà local có nội dung thì di trú
-  // canvas local-only lên server. Lỗi mạng/server thì giữ local, báo 'error'.
+  // Đọc danh sách dự án + tải dự án đang mở khi vào trang (chạy 1 lần).
+  // Dự án đang mở: id đã lưu nếu còn trong danh sách, không thì mới nhất.
+  // Chưa có dự án nào thì di trú canvas local (nếu có) thành dự án đầu tiên,
+  // không thì tạo dự án mặc định. Bản server thắng nếu người dùng chưa sửa gì
+  // sau khi mở; nếu đã sửa thì giữ bản local và đẩy nó lên server. Lỗi mạng/
+  // server thì giữ local, báo 'error' (không toast khi mở).
   useEffect(() => {
     const snapshot = docRef.current;
     const snapshotStr = JSON.stringify(snapshot);
     let cancelled = false;
-    (async () => {
+    const applyProjectDoc = async (id) => {
+      // Tải doc của 1 dự án; trả về true nếu đã áp dụng vào canvas
+      const res = await api.getCanvas(id);
+      if (cancelled) return false;
+      if (!res?.doc) return true; // dự án trống: giữ doc hiện tại
+      if (JSON.stringify(docRef.current) === snapshotStr) {
+        const migrated = migrateDoc(res.doc);
+        setDoc(migrated);
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(migrated)); } catch { /* ignore */ }
+        return true;
+      }
+      // Người dùng đã sửa sau khi mở: giữ bản local, đẩy lên server ngay
       try {
-        const res = await api.getCanvas();
-        if (cancelled) return;
-        const serverDoc = res?.doc;
-        if (serverDoc) {
-          if (JSON.stringify(docRef.current) === snapshotStr) {
-            const migrated = migrateDoc(serverDoc);
-            setDoc(migrated);
-            try { localStorage.setItem(STORE_KEY, JSON.stringify(migrated)); } catch { /* ignore */ }
-            // setDoc kích hoạt save effect → PUT lại bản server (idempotent) → 'saved'
-          } else {
-            // Người dùng đã sửa sau khi mở: giữ bản local, đẩy lên server ngay
-            serverLoadedRef.current = true;
-            setSaveState('saving');
-            try {
-              await api.saveCanvas(docRef.current);
-              if (!cancelled) setSaveState('saved');
-            } catch {
-              if (!cancelled) setSaveState('error');
-            }
-          }
-        } else {
-          const local = docRef.current;
-          const nonEmpty = (local.nodes?.length || 0) > 0 || (local.title && local.title !== 'Canvas vô hạn');
-          serverLoadedRef.current = true;
-          if (nonEmpty) {
-            setSaveState('saving');
-            try {
-              await api.saveCanvas(local);
-              if (!cancelled) setSaveState('saved');
-            } catch {
-              if (!cancelled) setSaveState('error');
-            }
-          } else {
-            setSaveState('saved'); // cả 2 bên đều trống: không có gì để đồng bộ
-          }
+        const saved = await api.saveCanvas(id, docRef.current);
+        if (!cancelled) {
+          setProjects((l) => l.map((p) => (p.id === id ? { ...p, title: docRef.current.title, nodeCount: (docRef.current.nodes || []).length, updatedAt: saved?.updatedAt || Date.now() } : p)));
+          setSaveState('saved');
         }
       } catch {
-        if (!cancelled) setSaveState('error'); // lỗi tải: giữ bản local, không toast
+        if (!cancelled) setSaveState('error');
+      }
+      return false;
+    };
+    (async () => {
+      try {
+        const listRes = await api.listCanvas();
+        if (cancelled) return;
+        const list = listRes?.projects || [];
+        setProjects(list);
+        let storedId = null;
+        try { storedId = localStorage.getItem(ACTIVE_KEY); } catch { /* ignore */ }
+        let active = list.find((p) => p.id === storedId) || list[0] || null;
+        if (!active) {
+          // Chưa có dự án nào: di trú canvas local (nếu có) hoặc tạo mới mặc định
+          const local = docRef.current;
+          const nonEmpty = (local.nodes?.length || 0) > 0 || (local.title && local.title !== 'Canvas vô hạn');
+          try {
+            const created = await api.createCanvas(nonEmpty ? (local.title || 'Canvas vô hạn') : 'Canvas vô hạn');
+            if (cancelled) return;
+            const proj = created?.project;
+            active = { id: proj.id, title: proj.title, nodeCount: 0, createdAt: proj.createdAt, updatedAt: proj.updatedAt };
+            setProjects([active]);
+            if (nonEmpty) {
+              try { await api.saveCanvas(active.id, local); } catch { /* lần lưu sau thử lại */ }
+            }
+          } catch {
+            if (!cancelled) setSaveState('error');
+            return; // giữ bản local, không toast khi mở
+          }
+        }
+        setActiveId(active.id);
+        activeIdRef.current = active.id;
+        try { localStorage.setItem(ACTIVE_KEY, active.id); } catch { /* ignore */ }
+        try {
+          await applyProjectDoc(active.id);
+        } catch {
+          if (!cancelled) setSaveState('error');
+        }
+      } catch {
+        if (!cancelled) setSaveState('error'); // lỗi tải danh sách: giữ bản local, không toast
       } finally {
         if (!cancelled) serverLoadedRef.current = true;
       }
@@ -265,12 +304,14 @@ export default function Canvas() {
   }, []);
 
   // Đẩy lần cuối khi ẩn trang / đóng trang (best-effort, không chờ).
+  // Ghi vào dự án đang mở (activeId qua ref để listener luôn thấy giá trị mới).
   useEffect(() => {
     const flush = () => {
       if (saveStateRef.current === 'saved') return;
       const token = getToken();
-      if (!token) return;
-      fetch('/api/canvas', {
+      const id = activeIdRef.current;
+      if (!token || !id) return;
+      fetch(`/api/canvas/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ doc: docRef.current }),
@@ -1017,6 +1058,107 @@ export default function Canvas() {
     });
   };
 
+  /* ---------------- Dự án canvas ---------------- */
+  // Đổi tiêu đề canvas (ô nhập trên thanh trên): cập nhật cả doc lẫn mục
+  // dự án trong danh sách; save effect (debounce) sẽ PUT tiêu đề mới lên server.
+  const onTitleChange = (v) => {
+    setDoc((d) => ({ ...d, title: v }));
+    const id = activeIdRef.current;
+    if (id) setProjects((list) => list.map((p) => (p.id === id ? { ...p, title: v } : p)));
+  };
+
+  // Chuyển sang dự án khác: ghi lại canvas hiện tại (best-effort) rồi tải doc mới.
+  const switchProject = async (id) => {
+    if (!id || id === activeIdRef.current || switching) return;
+    setSwitching(true);
+    setProjectMenuOpen(false);
+    try {
+      if (saveStateRef.current !== 'saved' && activeIdRef.current) {
+        try { await api.saveCanvas(activeIdRef.current, docRef.current); } catch { /* ignore */ }
+      }
+      const res = await api.getCanvas(id);
+      const migrated = migrateDoc(res?.doc || { title: 'Canvas vô hạn', nodes: [], links: [] });
+      setActiveId(id);
+      activeIdRef.current = id;
+      try { localStorage.setItem(ACTIVE_KEY, id); } catch { /* ignore */ }
+      setDoc(migrated);
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(migrated)); } catch { /* ignore */ }
+      setProjects((list) => list.map((p) => (p.id === id ? { ...p, title: migrated.title, nodeCount: (migrated.nodes || []).length } : p)));
+      setSaveState('saved');
+    } catch (e) {
+      toast(e.message || 'Không mở được dự án', 'error');
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  // Tạo dự án mới (tên mặc định "Dự án mới" nếu để trống) rồi chuyển sang nó.
+  const createProject = async () => {
+    const title = (newProjectName || '').trim() || 'Dự án mới';
+    setCreatingProject(true);
+    try {
+      const res = await api.createCanvas(title);
+      const proj = res?.project;
+      const entry = { id: proj.id, title: proj.title, nodeCount: 0, createdAt: proj.createdAt, updatedAt: proj.updatedAt };
+      setProjects((list) => [entry, ...list]);
+      setNewProjectName('');
+      await switchProject(entry.id);
+      toast('Đã tạo dự án', 'ok');
+    } catch (e) {
+      toast(e.message || 'Không tạo được dự án', 'error');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  // Đổi tên dự án (gọi PATCH; doc.title của dự án đang mở cũng đổi theo).
+  const submitRename = async (id) => {
+    const title = (renameValue || '').trim();
+    setRenamingId(null);
+    if (!title) return;
+    const old = projects.find((p) => p.id === id);
+    setProjects((list) => list.map((p) => (p.id === id ? { ...p, title } : p)));
+    try {
+      const res = await api.renameCanvas(id, title);
+      const finalTitle = res?.title || title;
+      setProjects((list) => list.map((p) => (p.id === id ? { ...p, title: finalTitle, updatedAt: res?.updatedAt || p.updatedAt } : p)));
+      if (id === activeIdRef.current) setDoc((d) => ({ ...d, title: finalTitle }));
+    } catch (e) {
+      setProjects((list) => list.map((p) => (p.id === id ? { ...p, title: old?.title || p.title } : p)));
+      toast(e.message || 'Không đổi tên được', 'error');
+    }
+  };
+
+  // Xóa dự án (hỏi lại trong app, không dùng confirm() của trình duyệt).
+  // Xóa dự án đang mở thì chuyển sang dự án mới nhất còn lại, hoặc tạo mới
+  // nếu không còn dự án nào.
+  const deleteProject = async (p) => {
+    if (!(await confirmDialog(`Xóa dự án “${p.title}”? Các nút trong dự án sẽ mất.`, { dontAskKey: 'canvas-delete-project' }))) return;
+    try {
+      await api.deleteCanvas(p.id);
+      const remaining = projects.filter((x) => x.id !== p.id);
+      setProjects(remaining);
+      if (p.id === activeIdRef.current) {
+        const next = remaining[0] || null;
+        if (next) {
+          await switchProject(next.id);
+        } else {
+          try {
+            const res = await api.createCanvas('Canvas vô hạn');
+            const proj = res?.project;
+            const entry = { id: proj.id, title: proj.title, nodeCount: 0, createdAt: proj.createdAt, updatedAt: proj.updatedAt };
+            setProjects([entry]);
+            await switchProject(entry.id);
+          } catch (e) {
+            toast(e.message || 'Không tạo được dự án mới', 'error');
+          }
+        }
+      }
+    } catch (e) {
+      toast(e.message || 'Không xóa được dự án', 'error');
+    }
+  };
+
   // Xuất canvas hiện tại ra file JSON (tải về máy, không gọi máy chủ)
   const exportCanvasJSON = () => {
     const now = new Date();
@@ -1519,7 +1661,7 @@ export default function Canvas() {
             </button>
             <input
               value={doc.title || ''}
-              onChange={(e) => setDoc((d) => ({ ...d, title: e.target.value }))}
+              onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Canvas vô hạn"
               aria-label="Tên canvas"
               className="h-9 min-w-0 max-w-[200px] rounded-lg bg-transparent px-2 text-[15px] font-semibold text-white outline-none placeholder:text-mist-400 hover:bg-white/5 focus:bg-white/5 sm:max-w-[320px]"
@@ -1528,6 +1670,127 @@ export default function Canvas() {
               <span className={clsx('h-1.5 w-1.5 rounded-full', saveState === 'saved' ? 'bg-brand-400' : saveState === 'error' ? 'bg-amber-400' : 'bg-mist-400')} />
               {saveState === 'saved' ? 'Đã tự động lưu' : saveState === 'error' ? 'Chưa đồng bộ được — sẽ thử lại' : 'Đang lưu…'}
             </span>
+            {/* Chọn dự án canvas: tạo / chuyển / đổi tên / xóa */}
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setProjectMenuOpen((v) => !v)}
+                disabled={switching}
+                title="Chọn dự án canvas"
+                aria-label="Chọn dự án canvas"
+                aria-expanded={projectMenuOpen}
+                className="flex h-9 items-center gap-1.5 rounded-lg bg-white/[0.07] px-2.5 text-[12.5px] font-medium text-mist-200 ring-1 ring-white/10 transition hover:bg-white/[0.12] hover:text-white disabled:opacity-50"
+              >
+                {switching ? <Loader2 size={14} className="animate-spin" /> : null}
+                Dự án
+                <ChevronDown size={14} className={clsx('transition-transform', projectMenuOpen && 'rotate-180')} />
+              </button>
+              {projectMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setProjectMenuOpen(false)} />
+                  <div className="absolute left-0 top-full z-50 mt-2 w-[320px] max-w-[calc(100vw-24px)] rounded-xl border border-white/10 bg-[#0d111c] p-2 shadow-2xl">
+                    {/* Tạo dự án mới */}
+                    <div className="flex items-center gap-1.5 px-1 pb-2">
+                      <input
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') createProject(); }}
+                        placeholder="Tên dự án mới…"
+                        aria-label="Tên dự án mới"
+                        className="h-8 min-w-0 flex-1 rounded-lg bg-white/[0.06] px-2.5 text-[12.5px] text-white outline-none placeholder:text-mist-400 focus:ring-1 focus:ring-brand-400/50"
+                      />
+                      <button
+                        onClick={createProject}
+                        disabled={creatingProject}
+                        title="Tạo dự án mới"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-500/20 text-brand-300 transition hover:bg-brand-500/30 disabled:opacity-50"
+                      >
+                        {creatingProject ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                      </button>
+                    </div>
+                    {/* Danh sách dự án */}
+                    <div className="max-h-[320px] overflow-y-auto">
+                      {projects.length === 0 && (
+                        <p className="px-2 py-3 text-[12px] text-mist-400">Chưa có dự án nào.</p>
+                      )}
+                      {projects.map((p) => {
+                        const isActive = p.id === activeId;
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => { if (renamingId !== p.id) switchProject(p.id); }}
+                            className={clsx(
+                              'flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition',
+                              isActive ? 'bg-brand-500/[0.12] ring-1 ring-brand-400/40' : 'hover:bg-white/[0.05]'
+                            )}
+                          >
+                            {renamingId === p.id ? (
+                              <input
+                                value={renameValue}
+                                autoFocus
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') submitRename(p.id);
+                                  if (e.key === 'Escape') setRenamingId(null);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label="Tên dự án mới"
+                                className="h-7 min-w-0 flex-1 rounded-md bg-white/[0.08] px-2 text-[12.5px] text-white outline-none focus:ring-1 focus:ring-brand-400/50"
+                              />
+                            ) : (
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[13px] font-medium text-white" title={p.title}>
+                                  {p.title}
+                                  {isActive && <span className="ml-1.5 text-[10.5px] font-normal text-brand-300">· đang mở</span>}
+                                </p>
+                                <p className="mt-0.5 truncate text-[11px] text-mist-400">
+                                  {(p.nodeCount ?? 0)} nút · {p.updatedAt ? new Date(p.updatedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                </p>
+                              </div>
+                            )}
+                            {renamingId === p.id ? (
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); submitRename(p.id); }}
+                                  title="Lưu tên"
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-brand-300 transition hover:bg-white/[0.08]"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setRenamingId(null); }}
+                                  title="Hủy"
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-mist-400 transition hover:bg-white/[0.08]"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {isActive && <Check size={14} className="shrink-0 text-brand-300" />}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setRenameValue(p.title); setRenamingId(p.id); }}
+                                  title="Đổi tên dự án"
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-mist-400 transition hover:bg-white/[0.08] hover:text-white"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); deleteProject(p); }}
+                                  title="Xóa dự án"
+                                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-mist-400 transition hover:bg-white/[0.08] hover:text-rose-400"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className="pointer-events-auto flex shrink-0 items-center gap-1">
             <button
