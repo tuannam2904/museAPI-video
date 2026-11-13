@@ -1127,7 +1127,7 @@ export default function Canvas() {
     try {
       const { job } = isImage
         ? await api.createImage({ prompt: promptText, size: node.size || '1:1', images })
-        : await api.createVideo({ prompt: promptText, duration: node.duration || 5, size: node.size || '16:9', images });
+        : await api.createVideo({ prompt: promptText, duration: node.duration || 5, size: node.size || '16:9', images, ...(node.vip ? { vip: true } : {}) });
       updateNode(node.id, { jobId: job.id, status: 'running', progress: 10, mediaUrl: null, error: null });
       toast('Đã gửi nút để tạo', 'ok');
       refresh();

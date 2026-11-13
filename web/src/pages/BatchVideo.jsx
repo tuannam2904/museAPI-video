@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Layers, BookOpen, Plus, X, Search, Download, RefreshCw, Trash2, Loader2,
-  Clock, Check, AlertTriangle, Square, Users, Play, Wand2,
+  Clock, Check, AlertTriangle, Square, Users, Play, Wand2, Crown,
   Video as VideoIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -72,6 +72,8 @@ export default function BatchVideo() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [retentionDays, setRetentionDays] = useState(7);
+  const [useVip, setUseVip] = useState(false);
+  const [isVip, setIsVip] = useState(false);
 
   /* ---------- nhân vật (lưu localStorage 'xm_characters') ---------- */
   const [characters, setCharacters] = useState(loadCharacters);
@@ -123,6 +125,11 @@ export default function BatchVideo() {
     api.jobs({ pageSize: 1 })
       .then((out) => { if (out.mediaRetentionDays) setRetentionDays(Number(out.mediaRetentionDays)); })
       .catch(() => {});
+  }, []);
+
+  /* ---------- VIP: chỉ user đang có VIP mới bật được ---------- */
+  useEffect(() => {
+    api.vipStatus().then((st) => setIsVip(!!st?.isVip)).catch(() => {});
   }, []);
 
   /* ---------- cập nhật tác vụ (tasksRef là nguồn thật, setTasks chỉ báo React) ---------- */
@@ -177,6 +184,7 @@ export default function BatchVideo() {
         duration: task.duration,
         size: task.size,
         images: task.refUrls,
+        ...(useVip ? { vip: true } : {}),
       });
       const job = out.job;
       updateTask(task.id, { jobId: job.id, progress: job.progress ?? 15 });
@@ -777,6 +785,25 @@ export default function BatchVideo() {
                   Điểm của bạn: {user?.credits ?? '—'}
                 </span>
               </div>
+
+              {/* Dùng acc VIP */}
+              <label className={clsx(
+                'flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[12.5px] transition',
+                isVip ? 'border-amber-500/30 bg-amber-500/[0.06]' : 'border-white/[0.06] bg-[#0d111c] opacity-60'
+              )}>
+                <input
+                  type="checkbox"
+                  checked={useVip}
+                  disabled={!isVip}
+                  onChange={(e) => setUseVip(e.target.checked)}
+                  className="h-4 w-4 accent-amber-400"
+                />
+                <Crown size={14} className={isVip ? 'text-amber-300' : 'text-mist-400'} />
+                <span className="text-mist-200">Dùng acc VIP</span>
+                <span className="ml-auto text-[11px] text-mist-400">
+                  {isVip ? 'Tạo bằng tài khoản Muse VIP của admin' : 'Cần có VIP — xem trang VIP'}
+                </span>
+              </label>
               <p className="text-[11.5px] text-mist-400">
                 Chạy đồng thời tối đa {concurrency} video (theo số tài khoản khả dụng).
               </p>

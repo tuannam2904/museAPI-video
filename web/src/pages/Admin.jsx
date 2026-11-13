@@ -15,6 +15,7 @@ const TABS = [
   ['ledger', 'Lịch sử điểm', Wallet],
   ['audit', 'Nhật ký', ShieldCheck],
   ['orders', 'Đơn hàng', Wallet],
+  ['vip', 'VIP', Crown],
   ['posts', 'Cộng đồng', MessageSquare],
   ['settings', 'Cài đặt', Settings2],
 ];
@@ -43,6 +44,7 @@ export default function Admin() {
       {tab === 'ledger' && <LedgerPanel />}
       {tab === 'audit' && <AuditPanel />}
       {tab === 'orders' && <OrdersPanel />}
+      {tab === 'vip' && <VipPanel />}
       {tab === 'posts' && <PostsPanel />}
       {tab === 'settings' && <SettingsPanel />}
     </div>
@@ -398,6 +400,11 @@ function UsersPanel() {
                     <button onClick={() => setDetailId(u.id)} className="block text-left" title="Xem chi tiết">
                       <p className="font-medium text-mist-200 hover:text-brand-300">{u.name}</p>
                       <p className="text-[11px] text-ink-500 hover:text-brand-300/70">{u.email}</p>
+                      {u.vipExpiresAt && u.vipExpiresAt > Date.now() && (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-medium text-amber-300">
+                          <Crown size={10} /> VIP đến {fmtTime(u.vipExpiresAt)}
+                        </span>
+                      )}
                     </button>
                   </td>
                   <td className="px-3 py-2.5">
@@ -481,6 +488,8 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
   const [pwResult, setPwResult] = useState('');
   const [limits, setLimits] = useState({ daily_credit_cap: '', max_concurrent_jobs: '', media_max_mb: '' });
   const [limitsBusy, setLimitsBusy] = useState(false);
+  const [vipDays, setVipDays] = useState('30');
+  const [vipBusy, setVipBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const loadDetail = useCallback(async () => {
@@ -566,6 +575,38 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
     }
   };
 
+  const grantVip = async () => {
+    const days = Number(vipDays);
+    if (!Number.isFinite(days) || days < 1) return toast('Số ngày VIP phải ≥ 1', 'error');
+    setVipBusy(true);
+    try {
+      await api.adminGrantVip(userId, days);
+      toast(`Đã cấp VIP ${days} ngày`, 'ok');
+      onChanged?.();
+      loadDetail();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setVipBusy(false);
+    }
+  };
+
+  const revokeVip = async () => {
+    const du = detail?.user;
+    if (!confirm(`Hủy VIP của «${du?.email}»? User sẽ không dùng được tài khoản Muse VIP nữa.`)) return;
+    setVipBusy(true);
+    try {
+      await api.adminRevokeVip(userId);
+      toast('Đã hủy VIP', 'ok');
+      onChanged?.();
+      loadDetail();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setVipBusy(false);
+    }
+  };
+
   const u = detail?.user;
   const st = detail?.stats || u?.stats || {};
   const jobs = detail?.jobs || [];
@@ -587,6 +628,9 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={u.role === 'admin' ? 'brand' : 'neutral'}>{u.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}</Badge>
             <Badge tone={u.status === 'active' ? 'ok' : 'error'}>{u.status === 'active' ? 'Bình thường' : 'Đã cấm'}</Badge>
+            {u.vipExpiresAt && u.vipExpiresAt > Date.now() && (
+              <Badge tone="warn">VIP đến {fmtTime(u.vipExpiresAt)}</Badge>
+            )}
             <span className="text-[12px] text-mist-400">Điểm: <b className="text-amber-300">{u.credits}</b></span>
             <span className="text-[12px] text-mist-400">Đăng ký: {fmtTime(u.createdAt)}</span>
           </div>
@@ -659,6 +703,38 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
             </div>
             <div className="mt-3 flex justify-end">
               <Button onClick={saveLimits} loading={limitsBusy}><Save size={13} /> Lưu hạn mức</Button>
+            </div>
+          </div>
+
+          {/* VIP */}
+          <div className="card p-4">
+            <h4 className="flex items-center gap-1.5 text-[13px] font-semibold text-mist-200">
+              <Crown size={13} className="text-amber-300" /> VIP
+            </h4>
+            <p className="mt-0.5 text-[11.5px] text-ink-500">
+              {u.vipExpiresAt && u.vipExpiresAt > Date.now()
+                ? `Đang VIP đến ${fmtTime(u.vipExpiresAt)} — user này dùng được các tài khoản Muse VIP.`
+                : 'Chưa có VIP — user này chỉ dùng được tài khoản Muse của chính họ.'}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Input
+                type="number"
+                min="1"
+                value={vipDays}
+                onChange={(e) => setVipDays(e.target.value)}
+                className="w-24"
+                placeholder="30"
+              />
+              <span className="text-[12px] text-mist-400">ngày</span>
+              <Button onClick={grantVip} loading={vipBusy}>Cấp VIP</Button>
+              <Button
+                variant="outline"
+                onClick={revokeVip}
+                loading={vipBusy}
+                disabled={!u.vipExpiresAt || u.vipExpiresAt <= Date.now()}
+              >
+                Hủy VIP
+              </Button>
             </div>
           </div>
 
@@ -994,6 +1070,247 @@ function OrdersPanel() {
           </table>
         </div>
         {orders.length === 0 && !loading && <Empty icon={Wallet} title="Chưa có đơn hàng" />}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------- VIP ------------------------------- */
+function VipPanel() {
+  const toast = useToast();
+  const [settings, setSettings] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [accounts, setAccounts] = useState([]);
+  const [accLoading, setAccLoading] = useState(true);
+  const [orders, setOrders] = useState([]);
+  const [ordLoading, setOrdLoading] = useState(true);
+  const [confirming, setConfirming] = useState(null);
+
+  useEffect(() => {
+    api.adminSettings().then((r) => setSettings(r.settings)).catch((e) => toast(e.message, 'error'));
+    api.adminVipAccounts()
+      .then((r) => setAccounts(r.accounts || []))
+      .catch((e) => toast(e.message, 'error'))
+      .finally(() => setAccLoading(false));
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast]);
+
+  const loadOrders = useCallback(async () => {
+    setOrdLoading(true);
+    try {
+      const out = await api.adminVipOrders();
+      setOrders(out.orders || []);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setOrdLoading(false);
+    }
+  }, [toast]);
+
+  const set = (k) => (e) => setSettings((s) => ({ ...s, [k]: e.target.value }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const out = await api.updateAdminSettings(settings);
+      setSettings(out.settings);
+      toast('Đã lưu cài đặt VIP', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleVipAccount = async (a) => {
+    try {
+      await api.setVipAccount(a.id, !a.vip);
+      setAccounts((l) => l.map((x) => (x.id === a.id ? { ...x, vip: !x.vip } : x)));
+      toast(a.vip ? `Đã bỏ VIP cho «${a.label}»` : `«${a.label}» đã là tài khoản VIP`, 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  const confirmOrder = async (o) => {
+    if (!confirm(`Xác nhận đã nhận ${Number(o.amount_vnd || 0).toLocaleString('vi-VN')}đ cho đơn ${o.code} và kích hoạt VIP cho user này?`)) return;
+    setConfirming(o.id);
+    try {
+      await api.adminConfirmVipOrder(o.id);
+      toast('Đã xác nhận và kích hoạt VIP', 'ok');
+      loadOrders();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setConfirming(null);
+    }
+  };
+
+  const vipStatus = (s) => (
+    s === 'paid' ? ['ok', 'Đã thanh toán']
+      : s === 'pending' ? ['brand', 'Chờ thanh toán']
+      : s === 'underpaid' ? ['warn', 'Thiếu tiền']
+      : s === 'expired' ? ['neutral', 'Hết hạn']
+      : s === 'canceled' ? ['neutral', 'Đã hủy']
+      : ['neutral', s || '—']
+  );
+
+  if (!settings) return <div className="grid place-items-center py-24 text-brand-400"><Spinner size={20} /></div>;
+
+  return (
+    <div className="space-y-4">
+      {/* Cài đặt giá gói + SePay */}
+      <div className="card p-5">
+        <h3 className="mb-1 text-[13.5px] font-semibold text-mist-200">Giá gói VIP (VND)</h3>
+        <p className="mb-4 text-[11.5px] text-ink-500">Thời hạn cố định: gói Ngày = 1 ngày, gói Tuần = 7 ngày, gói Tháng = 30 ngày.</p>
+        <div className="grid gap-3.5 sm:grid-cols-3">
+          <Field label="Gói Ngày (1 ngày)">
+            <Input type="number" min="0" value={settings.vipPriceDayVnd ?? ''} onChange={set('vipPriceDayVnd')} placeholder="VD: 15000" />
+          </Field>
+          <Field label="Gói Tuần (7 ngày)">
+            <Input type="number" min="0" value={settings.vipPriceWeekVnd ?? ''} onChange={set('vipPriceWeekVnd')} placeholder="VD: 79000" />
+          </Field>
+          <Field label="Gói Tháng (30 ngày)">
+            <Input type="number" min="0" value={settings.vipPriceMonthVnd ?? ''} onChange={set('vipPriceMonthVnd')} placeholder="VD: 249000" />
+          </Field>
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <h3 className="mb-1 text-[13.5px] font-semibold text-mist-200">Thanh toán SePay (chuyển khoản ngân hàng)</h3>
+        <p className="mb-4 text-[11.5px] text-ink-500">
+          Dùng chung Worker + tài khoản MB với bot Telegram aimibot. Hệ thống tự hỏi Worker
+          xem có tiền về không rồi kích hoạt VIP — không cần duyệt tay.
+        </p>
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <Field label="MAIL_API_URL (địa chỉ Worker)">
+            <Input value={settings.sepayMailApiUrl ?? ''} onChange={set('sepayMailApiUrl')} placeholder="https://mail.taphoaimi.dpdns.org" />
+          </Field>
+          <Field label="MAIL_API_TOKEN" hint="Token này không bao giờ hiện lại cho user thường — chỉ admin thấy ở đây">
+            <Input type="password" value={settings.sepayMailApiToken ?? ''} onChange={set('sepayMailApiToken')} placeholder="Dán token của Worker" autoComplete="off" />
+          </Field>
+          <Field label="Số tài khoản nhận tiền">
+            <Input value={settings.sepayMbAccountNo ?? ''} onChange={set('sepayMbAccountNo')} placeholder="VD: 1136226868" />
+          </Field>
+          <Field label="Tên chủ tài khoản">
+            <Input value={settings.sepayMbAccountName ?? ''} onChange={set('sepayMbAccountName')} placeholder="VD: NGUYEN TUAN NAM" />
+          </Field>
+          <Field label="BIN ngân hàng">
+            <Input value={settings.sepayMbBin ?? ''} onChange={set('sepayMbBin')} placeholder="VD: 970422 (MB)" />
+          </Field>
+          <Field label="Tiền tố mã đơn">
+            <Input value={settings.sepayCodePrefix ?? ''} onChange={set('sepayCodePrefix')} placeholder="VD: VIP" />
+          </Field>
+          <Field label="Đơn hết hạn sau (phút)">
+            <Input type="number" min="1" value={settings.vipOrderTtlMin ?? ''} onChange={set('vipOrderTtlMin')} placeholder="10" />
+          </Field>
+          <Field label="Hỏi Worker mỗi (giây)">
+            <Input type="number" min="5" value={settings.vipPollSeconds ?? ''} onChange={set('vipPollSeconds')} placeholder="15" />
+          </Field>
+        </div>
+        <div className="mt-4">
+          <Button loading={saving} onClick={save}><Save size={14} /> Lưu cài đặt VIP</Button>
+        </div>
+      </div>
+
+      {/* Tài khoản Muse VIP */}
+      <div className="card p-5">
+        <h3 className="mb-1 text-[13.5px] font-semibold text-mist-200">Tài khoản Muse VIP</h3>
+        <p className="mb-4 text-[11.5px] text-ink-500">
+          Chỉ user đang có VIP mới được dùng các tài khoản đã bật VIP ở đây. User không có VIP
+          chỉ dùng được tài khoản Muse của chính họ.
+        </p>
+        {accLoading ? (
+          <div className="grid place-items-center py-10 text-brand-400"><Spinner size={18} /></div>
+        ) : accounts.length === 0 ? (
+          <Empty icon={Crown} title="Chưa có tài khoản Muse nào" desc="Nhập tài khoản Muse ở trang Nhập Muse trước, rồi bật VIP ở đây." />
+        ) : (
+          <div className="space-y-1.5">
+            {accounts.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-900 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-mist-200">{a.label}</p>
+                  <p className="font-mono text-[10.5px] text-ink-500">
+                    {a.upstream_id ? `#${String(a.upstream_id).slice(0, 8)}` : ''}
+                    {a.owner_id ? ' · tài khoản riêng' : ' · kho chung'}
+                    {a.status ? ` · ${a.status}` : ''}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {a.vip && <Badge tone="warn">VIP</Badge>}
+                  <button
+                    onClick={() => toggleVipAccount(a)}
+                    className={clsx(
+                      'relative h-6 w-11 shrink-0 rounded-full transition',
+                      a.vip ? 'bg-amber-500' : 'bg-ink-600'
+                    )}
+                    title={a.vip ? 'Bấm để bỏ VIP' : 'Bấm để đánh dấu VIP'}
+                    aria-label={a.vip ? 'Bỏ VIP' : 'Đánh dấu VIP'}
+                  >
+                    <span className={clsx(
+                      'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all',
+                      a.vip ? 'left-[22px]' : 'left-0.5'
+                    )}
+                    />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Đơn VIP */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-ink-700 px-4 py-3">
+          <h3 className="text-[13px] font-semibold text-mist-200">Đơn VIP ({orders.length})</h3>
+          <Button variant="outline" size="sm" onClick={loadOrders} loading={ordLoading}>
+            <RefreshCw size={12} /> Làm mới
+          </Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12.5px]">
+            <thead className="border-b border-ink-700 text-[11px] uppercase tracking-wide text-ink-500">
+              <tr>
+                <th className="px-4 py-2.5 font-medium">Mã đơn</th>
+                <th className="px-3 py-2.5 font-medium">Người dùng</th>
+                <th className="px-3 py-2.5 text-right font-medium">Số tiền</th>
+                <th className="px-3 py-2.5 font-medium">Trạng thái</th>
+                <th className="px-3 py-2.5 font-medium">Tạo lúc</th>
+                <th className="px-3 py-2.5 font-medium">Thanh toán lúc</th>
+                <th className="px-4 py-2.5 text-right font-medium">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-800">
+              {orders.map((o) => {
+                const [tone, label] = vipStatus(o.status);
+                return (
+                  <tr key={o.id} className="hover:bg-ink-800/40">
+                    <td className="px-4 py-2.5 font-mono text-[11.5px] font-semibold text-amber-300">{o.code}</td>
+                    <td className="px-3 py-2.5 text-[11.5px] text-mist-300">{o.email || o.user_id}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-mist-100">{Number(o.amount_vnd || 0).toLocaleString('vi-VN')}đ</td>
+                    <td className="px-3 py-2.5"><Badge tone={tone}>{label}</Badge></td>
+                    <td className="px-3 py-2.5 text-[11px] text-ink-500">{fmtTime(o.created_at)}</td>
+                    <td className="px-3 py-2.5 text-[11px] text-ink-500">{o.paid_at ? fmtTime(o.paid_at) : '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      {(o.status === 'pending' || o.status === 'underpaid') && (
+                        <Button
+                          size="sm"
+                          loading={confirming === o.id}
+                          onClick={() => confirmOrder(o)}
+                        >
+                          Xác nhận
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {orders.length === 0 && !ordLoading && <Empty icon={Crown} title="Chưa có đơn VIP nào" />}
       </div>
     </div>
   );
