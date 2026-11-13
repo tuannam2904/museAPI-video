@@ -314,6 +314,10 @@ const DEFAULT_SETTINGS = {
   vipPriceDayVnd: '9000',
   vipPriceWeekVnd: '49000',
   vipPriceMonthVnd: '99000',
+  // VIP: giới hạn số lượt tạo (video + ảnh) MỖI tài khoản Muse VIP được dùng trong 1 ngày
+  // (tính từ 0h đến 24h giờ địa phương). Hết lượt thì acc đó nghỉ đến ngày mai;
+  // user muốn tạo thêm thì tự thêm tài khoản Muse của mình. Đổi được trong Admin.
+  vipDailyVideoLimit: '100',
   // SePay (VietQR + chuyển khoản MB): Worker nhận webhook rồi cho platform poll.
   sepayMailApiUrl: '',
   sepayMailApiToken: '',
