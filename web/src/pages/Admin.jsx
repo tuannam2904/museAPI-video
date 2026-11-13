@@ -1174,6 +1174,9 @@ function VipPanel() {
           <Field label="Gói Tháng (30 ngày)">
             <Input type="number" min="0" value={settings.vipPriceMonthVnd ?? ''} onChange={set('vipPriceMonthVnd')} placeholder="VD: 249000" />
           </Field>
+          <Field label="Giới hạn lượt tạo / ngày / acc VIP" hint="Mỗi tài khoản VIP tạo tối đa từng này lượt mỗi ngày — hết lượt thì user tự thêm tài khoản của họ">
+            <Input type="number" min="0" value={settings.vipDailyVideoLimit ?? ''} onChange={set('vipDailyVideoLimit')} placeholder="100" />
+          </Field>
         </div>
       </div>
 
@@ -1238,6 +1241,11 @@ function VipPanel() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {a.vip && a.todayUsed != null && a.dailyLimit != null && (
+                    <span className="shrink-0 text-[11.5px] tabular-nums text-mist-300">
+                      {a.todayUsed}/{a.dailyLimit} hôm nay
+                    </span>
+                  )}
                   {a.vip && <Badge tone="warn">VIP</Badge>}
                   <button
                     onClick={() => toggleVipAccount(a)}

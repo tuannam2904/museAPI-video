@@ -31,6 +31,9 @@ function buildProxy(server, user, pass) {
 export default function Accounts() {
   const toast = useToast();
   const { user } = useAuth();
+  // Chỉ quản trị viên mới thấy / chạm được phần viết prompt chung — dùng cùng
+  // cách kiểm tra admin như AdminGuard (App.jsx) và Layout.jsx
+  const isAdmin = user?.role === 'admin';
   const [list, setList] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -245,6 +248,7 @@ export default function Accounts() {
             <AccountRow
               key={a.id}
               a={a}
+              isAdmin={isAdmin}
               busy={busyId === a.id}
               expanded={expandedId === a.id}
               onToggleExpand={() => setExpandedId((v) => (v === a.id ? null : a.id))}
@@ -294,10 +298,13 @@ const AVATAR_GRADS = [
 ];
 const gradFor = (id = '') => AVATAR_GRADS[[...String(id)].reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_GRADS.length];
 
-function AccountRow({ a, busy, expanded, onToggleExpand, onTest, onKeepalive, onRemove, onQuota, onProxy, onPromptWriter }) {
+function AccountRow({ a, isAdmin, busy, expanded, onToggleExpand, onTest, onKeepalive, onRemove, onQuota, onProxy, onPromptWriter }) {
   const st = STATUS[a.status] || STATUS.unknown;
   const expiring = a.expiresAt && a.expiresAt * 1000 - Date.now() < 6 * 3600 * 1000;
   const left = a.quota?.weeklyLeftPct;
+  // Nhóm viết prompt chỉ admin mới thấy — người thường nhìn hàng như chưa từng
+  // có tính năng này: không huy hiệu, không viền brand, không nút Wand2
+  const showPromptWriter = isAdmin && a.isPromptWriter;
   const sub = [
     a.expiresAt
       ? `Hiệu lực đến ${new Date(a.expiresAt * 1000).toLocaleString('vi-VN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
@@ -310,7 +317,7 @@ function AccountRow({ a, busy, expanded, onToggleExpand, onTest, onKeepalive, on
     <div
       className={clsx(
         'overflow-hidden rounded-xl border transition',
-        a.isPromptWriter
+        showPromptWriter
           ? 'border-l-4 border-l-brand-400 border-y-white/[0.08] border-r-white/[0.08] bg-brand-500/[0.06]'
           : 'border-white/[0.07] bg-white/[0.02] hover:border-white/[0.12]'
       )}
@@ -329,7 +336,7 @@ function AccountRow({ a, busy, expanded, onToggleExpand, onTest, onKeepalive, on
             <p className="truncate text-[13.5px] font-semibold text-white" title={a.label}>{a.label}</p>
             <Badge tone={st.tone} dot>{st.label}</Badge>
             {a.shared && <Badge tone="brand">Kho chung</Badge>}
-            {a.isPromptWriter && <Badge tone="brand">Viết prompt</Badge>}
+            {showPromptWriter && <Badge tone="brand">Viết prompt</Badge>}
           </div>
           {sub && <p className="mt-0.5 truncate text-[11.5px] text-mist-400" title={sub}>{sub}</p>}
         </div>
@@ -351,14 +358,16 @@ function AccountRow({ a, busy, expanded, onToggleExpand, onTest, onKeepalive, on
           <IconBtn title="Kiểm tra" disabled={busy} onClick={onTest}><ShieldCheck size={14} /></IconBtn>
           <IconBtn title="Duy trì" disabled={busy} onClick={onKeepalive}><Activity size={14} /></IconBtn>
           <IconBtn title="Proxy" disabled={busy} onClick={onProxy}><Globe size={14} /></IconBtn>
-          <IconBtn
-            title={a.isPromptWriter ? 'Gỡ khỏi nhóm viết prompt' : 'Thêm vào nhóm viết prompt'}
-            disabled={busy}
-            active={!!a.isPromptWriter}
-            onClick={onPromptWriter}
-          >
-            <Wand2 size={14} />
-          </IconBtn>
+          {isAdmin && (
+            <IconBtn
+              title={a.isPromptWriter ? 'Gỡ khỏi nhóm viết prompt' : 'Thêm vào nhóm viết prompt'}
+              disabled={busy}
+              active={!!a.isPromptWriter}
+              onClick={onPromptWriter}
+            >
+              <Wand2 size={14} />
+            </IconBtn>
+          )}
           <IconBtn title="Xóa" danger disabled={busy} onClick={onRemove}><Trash2 size={14} /></IconBtn>
           <ChevronRight
             size={15}

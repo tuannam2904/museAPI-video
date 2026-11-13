@@ -1122,7 +1122,8 @@ export default function Canvas() {
     if (promptText.length < 2) return toast('Nút này chưa có câu lệnh — nhập câu lệnh hoặc nối một nút văn bản vào', 'error');
     const isImage = node.type === 'image';
     const cost = isImage ? IMAGE_COST : 10 + 2 * (node.duration || 5);
-    if ((user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
+    // Nút video bật acc VIP thì không tốn điểm — chỉ tính vào giới hạn lượt tạo mỗi ngày của acc VIP.
+    if (!node.vip && (user?.credits ?? 0) < cost) return toast('Không đủ điểm', 'error');
     setBusy(true);
     try {
       const { job } = isImage

@@ -191,11 +191,14 @@ export default function BatchVideo() {
       refresh();
     } catch (e) {
       updateTask(task.id, { status: 'failed', error: e.message || 'Tạo thất bại', finishedAt: Date.now() });
-      if (e.status === 402) {
+      if (e.status === 402 && !useVip) {
         stopRef.current = true;
         toast('Không đủ điểm — đã dừng hàng loạt', 'error');
       } else {
-        toast(e.message, 'error');
+        // Lỗi từ server (kể cả hết lượt VIP hôm nay) hiện nguyên văn, không thay bằng câu chung.
+        toast(e.message || 'Tạo thất bại', 'error');
+        // Hết lượt VIP hôm nay thì dừng hàng loạt, khỏi thử từng video còn lại.
+        if (useVip && (e.status === 429 || e.status === 403)) stopRef.current = true;
       }
     }
   };
@@ -243,7 +246,8 @@ export default function BatchVideo() {
     }
     if (prompts.length) {
       const total = prompts.length * perVideo;
-      if ((user?.credits ?? 0) < total) {
+      // Dùng acc VIP thì không tốn điểm — chỉ tính vào giới hạn lượt tạo mỗi ngày của acc VIP.
+      if (!useVip && (user?.credits ?? 0) < total) {
         return toast(`Không đủ điểm, cần ${total} điểm cho ${prompts.length} video`, 'error');
       }
       const base = tasksRef.current.length
@@ -778,10 +782,17 @@ export default function BatchVideo() {
 
               {/* Chi phí */}
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#0d111c] px-3 py-2.5 text-[12.5px]">
-                <span className="text-mist-300">
-                  {lineCount} video × {perVideo} điểm = <b className="text-white">{totalCost} điểm</b>
-                </span>
-                <span className={clsx(lineCount > 0 && (user?.credits ?? 0) < totalCost ? 'font-medium text-rose-300' : 'text-mist-400')}>
+                {useVip ? (
+                  <span className="text-mist-300">
+                    {lineCount} video · <b className="text-amber-300">Dùng acc VIP — không tốn điểm</b>
+                    <span className="text-mist-400"> (tính vào giới hạn lượt tạo mỗi ngày của acc VIP)</span>
+                  </span>
+                ) : (
+                  <span className="text-mist-300">
+                    {lineCount} video × {perVideo} điểm = <b className="text-white">{totalCost} điểm</b>
+                  </span>
+                )}
+                <span className={clsx(!useVip && lineCount > 0 && (user?.credits ?? 0) < totalCost ? 'font-medium text-rose-300' : 'text-mist-400')}>
                   Điểm của bạn: {user?.credits ?? '—'}
                 </span>
               </div>
