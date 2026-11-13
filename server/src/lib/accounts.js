@@ -4,15 +4,19 @@ import { listAccounts } from '../muse.js';
 /**
  * Chọn tài khoản Muse cho 1 user dùng để tạo video/ảnh (VIP gating).
  *
- * - Mặc định (không VIP): chỉ dùng tài khoản của chính user đó
- *   (accounts.owner_id = userId). Không rớt xuống kho chung.
- * - vip: true → dùng tài khoản VIP do admin cung cấp (accounts.vip = 1),
- *   yêu cầu user còn quyền VIP (users.vip_expires_at > now).
+ * - Mặc định (không VIP): dùng tài khoản của chính user đó
+ *   (accounts.owner_id = userId) trước; nếu user không có acc riêng mà
+ *   còn quyền VIP (hoặc là admin) thì dùng acc VIP do admin cung cấp
+ *   (accounts.vip = 1, chịu giới hạn lượt/ngày). Không rớt xuống kho chung.
+ * - vip: true → dùng tài khoản VIP do admin cung cấp, yêu cầu user còn
+ *   quyền VIP (hoặc là admin).
  * - accountId: user chỉ định 1 tài khoản — chỉ cho phép tài khoản của chính
- *   họ, hoặc tài khoản VIP khi họ còn quyền VIP.
+ *   họ, hoặc tài khoản VIP khi họ còn quyền VIP (hoặc là admin).
+ * - Admin được tính như VIP khi chọn tài khoản (dùng được acc VIP) nhưng
+ *   KHÔNG được tính là VIP ở các chỗ khác (hiển thị, gia hạn, thanh toán).
  *
  * Phụ thuộc schema do vip.js/admin.js quản lý: accounts.vip (0/1),
- * users.vip_expires_at (ms epoch, null = không có VIP).
+ * users.vip_expires_at (ms epoch, null = không có VIP), users.role.
  */
 
 /** Lỗi chọn tài khoản + HTTP status và thông báo tiếng Việt cho frontend. */
@@ -32,6 +36,36 @@ export const PICK_ERRORS = {
 
 /** true nếu user còn quyền VIP (vip_expires_at > now). Dùng chung helper của db.js. */
 export const isVipUser = isVip;
+
+/** true nếu user có role admin. Admin dùng được acc VIP như user VIP. */
+function isAdminUser(userId) {
+  try {
+    const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
+    return u?.role === 'admin';
+  } catch {
+    return false;
+  }
+}
+
+/** true nếu user được dùng acc VIP: còn quyền VIP, hoặc là admin. */
+function canUseVip(userId) {
+  return isVipUser(userId) || isAdminUser(userId);
+}
+
+/**
+ * Chọn 1 acc VIP còn lượt hôm nay (ngẫu nhiên để tải chia đều).
+ * Trả { upstreamId, platformId, mode: 'vip' } hoặc { error }.
+ * `usable` là hàm lọc acc có upstream_id và đang bật (định nghĩa trong pickAccountForUser).
+ */
+function pickVipAccount(usable) {
+  const cands = usable(db.prepare('SELECT * FROM accounts WHERE vip = 1').all());
+  if (!cands.length) return { error: 'no_vip_account' };
+  const limit = getVipDailyLimit();
+  const available = cands.filter((a) => vipAccountTodayCount(a.upstream_id) < limit);
+  if (!available.length) return { error: 'vip_daily_cap' };
+  const pick = pickRandom(available);
+  return { upstreamId: pick.upstream_id, platformId: pick.id, mode: 'vip' };
+}
 
 /**
  * Tập upstream_id đang bật (upstream /admin/accounts, enabled !== false).
@@ -98,7 +132,7 @@ export function vipAccountTodayCount(upstreamId) {
 export async function pickAccountForUser(userId, opts = {}) {
   const vip = !!opts.vip;
   const accountId = opts.accountId || null;
-  const userIsVip = isVipUser(userId);
+  const userIsVip = canUseVip(userId);
 
   // User chỉ định 1 tài khoản cụ thể.
   if (accountId) {
@@ -129,20 +163,18 @@ export async function pickAccountForUser(userId, opts = {}) {
   // chọn ngẫu nhiên để tải chia đều. Tất cả đều hết lượt thì báo để user tự thêm acc.
   if (vip) {
     if (!userIsVip) return { error: 'vip_required' };
-    const cands = usable(db.prepare('SELECT * FROM accounts WHERE vip = 1').all());
-    if (!cands.length) return { error: 'no_vip_account' };
-    const limit = getVipDailyLimit();
-    const available = cands.filter((a) => vipAccountTodayCount(a.upstream_id) < limit);
-    if (!available.length) return { error: 'vip_daily_cap' };
-    const pick = pickRandom(available);
-    return { upstreamId: pick.upstream_id, platformId: pick.id, mode: 'vip' };
+    return pickVipAccount(usable);
   }
 
-  // Mặc định: chỉ tài khoản của chính user.
+  // Mặc định: tài khoản của chính user trước; nếu không có acc riêng mà user
+  // là VIP (hoặc admin) thì dùng acc VIP (chịu giới hạn lượt/ngày).
   const own = usable(
     db.prepare('SELECT * FROM accounts WHERE owner_id = ? AND upstream_id IS NOT NULL').all(userId)
   );
-  if (!own.length) return { error: 'no_own_account' };
-  const pick = pickRandom(own);
-  return { upstreamId: pick.upstream_id, platformId: pick.id, mode: 'own' };
+  if (own.length) {
+    const pick = pickRandom(own);
+    return { upstreamId: pick.upstream_id, platformId: pick.id, mode: 'own' };
+  }
+  if (userIsVip) return pickVipAccount(usable);
+  return { error: 'no_own_account' };
 }
