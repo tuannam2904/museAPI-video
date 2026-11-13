@@ -160,6 +160,12 @@ export default function VipPage() {
               ? `VIP của bạn có hiệu lực đến ${fmtTime(vipUntil)} — dùng được các tài khoản Muse VIP do admin cung cấp.`
               : 'VIP được dùng các tài khoản Muse VIP do admin cung cấp. Không có VIP thì bạn dùng tài khoản Muse của chính mình.'}
           </p>
+          {status?.vipActiveCount != null && (
+            <p className="mt-1 text-[12.5px] leading-relaxed text-mist-400">
+              Hiện có <b className="text-brand-300">{status.vipActiveCount} tài khoản Muse đang hoạt động</b>
+              {status.vipTotalCount > 0 && <> / {status.vipTotalCount} acc VIP</>}.
+            </p>
+          )}
         </div>
         {isVip && <Badge tone="warn">VIP đến {fmtTime(vipUntil)}</Badge>}
       </div>

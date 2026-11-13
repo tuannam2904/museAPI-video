@@ -195,6 +195,14 @@ export default function Accounts() {
               {summary.totalVideos > 0 && <> · Đã tạo <b className="text-brand-300">{summary.totalVideos} video</b></>}
             </span>
           )}
+          {/* Pool acc VIP do admin cung cấp: user không thấy từng acc, chỉ thấy số lượng đang hoạt động. */}
+          {summary?.vipActiveCount != null && (
+            <span className="hidden items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-[11.5px] text-mist-300 md:flex" title="Tài khoản Muse do admin cung cấp cho VIP — bạn không thấy chi tiết từng tài khoản">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <b className="text-brand-300">{summary.vipActiveCount} Muse đang hoạt động</b>
+              {summary.vipTotalCount > 0 && <span className="text-ink-500">/ {summary.vipTotalCount} acc VIP</span>}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <label className="relative">
