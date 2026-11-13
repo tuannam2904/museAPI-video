@@ -50,7 +50,6 @@ export const api = {
   clearPromptWriter: (id) => request(`/api/accounts/${id}/prompt-writer`, { method: 'DELETE' }),
 
   createVideo: (b) => request('/api/videos', { method: 'POST', body: b }),
-  stitchVideos: (jobIds) => request('/api/videos/stitch', { method: 'POST', body: { jobIds } }),
   createImage: (b) => request('/api/images', { method: 'POST', body: b }),
   jobs: (q = {}) => {
     const s = new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined && v !== null && v !== ''));
