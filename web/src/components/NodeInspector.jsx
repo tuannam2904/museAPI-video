@@ -12,7 +12,7 @@ const ASSIST_SYSTEM = 'Bạn là trợ lý viết prompt cho công cụ tạo vi
 
 const IMAGE_SIZES = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 const VIDEO_SIZES = ['16:9', '9:16', '1:1'];
-const DURATIONS = [5, 8, 10, 60];
+const DURATIONS = [5, 8, 10];
 
 const inputName = (n) => n.label
   || (n.type === 'image' ? 'Hình ảnh' : n.type === 'text' ? 'Văn bản' : n.type === 'group' ? 'Nhóm' : 'Nút');
@@ -249,11 +249,6 @@ export default function NodeInspector({
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => pickFile(e.target.files)} />
         </div>
       </div>
-      {isVideo && (node.duration || 5) === 60 && (
-        <p className="mt-1.5 text-[11px] leading-snug text-amber-300/80">
-          60 giây = 6 đoạn × 10 giây nối lại (cùng một câu lệnh) · tính 6 lượt tạo video.
-        </p>
-      )}
     </div>
   );
 }
