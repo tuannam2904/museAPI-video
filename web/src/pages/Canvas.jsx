@@ -134,6 +134,9 @@ export default function Canvas() {
 
   const viewportRef = useRef(null);
   const dragRef = useRef(null); // { mode:'pan'|'node'|'link', ... }
+  // Vừa kéo nút xong thì bấm (click) ngay sau đó không được mở xem to —
+  // trình duyệt vẫn bắn click sau pointerup dù đã kéo nút đi xa.
+  const justDraggedRef = useRef(false);
   // Chụm 2 ngón để zoom (cảm ứng): { pointers: Map<id,{x,y}>, startDist, startZ, startMid, startView }
   const pinchRef = useRef(null);
   const docRef = useRef(doc);
@@ -588,10 +591,18 @@ export default function Canvas() {
         // Bấm (không kéo) vào nút: bấm vào ảnh/video thì mở xem to; nút văn bản
         // thì nhập trực tiếp trong nút; nút ảnh/video thì mở bảng cấu hình
         const moved = e && e.clientX != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
+        if (moved >= 6) {
+          // Vừa kéo nút — chặn click bắn sau pointerup mở xem to nhầm
+          justDraggedRef.current = true;
+          setTimeout(() => { justDraggedRef.current = false; }, 120);
+        }
         if (moved < 6) {
           if (d.fromMedia) {
             const node = docRef.current.nodes.find((n) => n.id === d.id);
-            if (node?.mediaUrl) setViewing(node);
+            if (node?.mediaUrl) {
+              setInspectorId(null); // đóng bảng để xem to không bị bảng che
+              setViewing(node);
+            }
           } else {
             const node = docRef.current.nodes.find((n) => n.id === d.id);
             // Nhóm không có bảng cấu hình riêng
@@ -927,7 +938,9 @@ export default function Canvas() {
       x: startX + i * (NODE_W + 60),
       y: startY,
       width: NODE_W,
-      text: s.prompt || s.visual || '',
+      // Prompt nút gồm cả mô tả cảnh VÀ góc quay — trước đây chỉ lấy prompt/visual
+      // nên góc quay nằm ở trường camera riêng bị mất khi đưa lên Canvas.
+      text: [s.prompt || s.visual || '', s.camera ? `Góc quay: ${s.camera}` : ''].filter(Boolean).join('\n'),
       label: `Shot ${s.shot || i + 1}`,
       size: aspect || '9:16',
       duration: s.duration || 8,
@@ -1557,7 +1570,8 @@ export default function Canvas() {
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
-                onView={() => setViewing(n)}
+                onView={() => { setInspectorId(null); setViewing(n); }}
+                suppressViewRef={justDraggedRef}
                 onDoubleClick={() => renameGroup(n)}
               />
             ))}
@@ -1570,7 +1584,8 @@ export default function Canvas() {
                 active={selected.includes(n.id)}
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
-                onView={() => setViewing(n)}
+                onView={() => { setInspectorId(null); setViewing(n); }}
+                suppressViewRef={justDraggedRef}
                 editing={editingTextId === n.id}
                 assisting={assistingText}
                 onTextChange={(t) => updateNode(n.id, { text: t })}
@@ -2078,7 +2093,7 @@ function ToolBtn({ icon: Icon, onClick, active, disabled, danger, title }) {
   );
 }
 
-function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
+function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, suppressViewRef, nodeRef, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -2222,7 +2237,17 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
           </p>
         )
       ) : (
-        <div data-media className="relative cursor-pointer overflow-hidden rounded-xl bg-black/40" title="Bấm để xem to" style={{ height: mediaH }}>
+        <div
+          data-media
+          className="relative cursor-pointer overflow-hidden rounded-xl bg-black/40"
+          title="Bấm để xem to"
+          style={{ height: mediaH }}
+          onClick={(e) => {
+            if (e.target.closest('button')) return;
+            if (suppressViewRef?.current) return;
+            if (node.mediaUrl) onView?.();
+          }}
+        >
           {node.mediaUrl ? (
             <>
               {node.type === 'video' ? (
