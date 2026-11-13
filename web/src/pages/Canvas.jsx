@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Type, Image as ImageIcon, Video, Trash2, Maximize, Loader2, X, Sparkles, Wand2, Check,
-  MousePointer2, Hand, ImagePlus, Expand, Clapperboard,
+  MousePointer2, Hand, ImagePlus, Expand, Clapperboard, Play, Pause,
   Download, Undo2, Redo2, Menu, Palette, Eraser, Crosshair, Sun, Moon,
   Group, Ungroup, ChevronDown, Plus, Pencil,
 } from 'lucide-react';
@@ -485,28 +485,6 @@ export default function Canvas() {
   };
 
   // Bắt đầu kéo đổi cỡ từ tay nắm góc của nút đang chọn (chuột lẫn cảm ứng)
-  const onResizeDown = (e, node, corner) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (e.button === 2) return;
-    // Nút ảnh/video giữ nguyên tỉ lệ khung khi kéo; nút văn bản kéo tự do.
-    const ratio = (node.type === 'image' || node.type === 'video')
-      ? (node.width ?? NODE_W) / nodeH(node)
-      : null;
-    dragRef.current = {
-      mode: 'resize',
-      id: node.id,
-      corner,
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: node.x,
-      origY: node.y,
-      origW: node.width ?? NODE_W,
-      origH: nodeH(node),
-      ratio,
-    };
-  };
-
   useEffect(() => {
     // Chụm 2 ngón (cảm ứng) để zoom: theo dõi mọi con trỏ chạm vào canvas.
     const onDown = (e) => {
@@ -563,34 +541,6 @@ export default function Canvas() {
 
       if (d.mode === 'pan') {
         setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
-      } else if (d.mode === 'resize') {
-        // Kéo đổi cỡ: delta chuột chia theo zoom để ra tọa độ world.
-        // Góc tây/bắc thì cạnh đối diện giữ nguyên (x/y dịch theo).
-        const cdx = dx / view.z;
-        const cdy = dy / view.z;
-        const west = d.corner.includes('w');
-        const north = d.corner.includes('n');
-        let newW = west ? d.origW - cdx : d.origW + cdx;
-        let newH = north ? d.origH - cdy : d.origH + cdy;
-        if (d.ratio) {
-          // Giữ tỉ lệ khung: trục nào đổi nhiều hơn thì trục đó dẫn.
-          if (Math.abs(newW - d.origW) >= Math.abs(newH - d.origH)) newH = newW / d.ratio;
-          else newW = newH * d.ratio;
-        }
-        newW = Math.max(120, newW);
-        newH = Math.max(80, newH);
-        if (d.ratio) {
-          if (newW / d.ratio < 80) { newH = 80; newW = 80 * d.ratio; }
-          else newH = newW / d.ratio;
-        }
-        const nx = west ? d.origX + d.origW - newW : d.origX;
-        const ny = north ? d.origY + d.origH - newH : d.origY;
-        setDoc((prev) => ({
-          ...prev,
-          nodes: prev.nodes.map((n) => (n.id === d.id
-            ? { ...n, x: Math.round(nx), y: Math.round(ny), width: Math.round(newW), height: Math.round(newH) }
-            : n)),
-        }));
       } else if (d.mode === 'node') {
         const cdx = dx / view.z;
         const cdy = dy / view.z;
@@ -632,11 +582,6 @@ export default function Canvas() {
           setSelected(ids);
           setInspectorId(null);
         }
-        return;
-      }
-      if (d.mode === 'resize') {
-        // Kéo đổi cỡ xong: không mở bảng cấu hình, không làm gì thêm
-        // (đổi cỡ đã ghi vào lịch sử qua structuralSig).
         return;
       }
       if (d.mode === 'node') {
@@ -859,6 +804,15 @@ export default function Canvas() {
   }, [selected]);
 
   /* ---------------- 节点操作 ---------------- */
+  // Tên tự động cho nút ảnh mới: Ảnh 1, Ảnh 2… (số nhỏ nhất chưa dùng,
+  // để biết gọi nút nào khi làm ảnh tham chiếu).
+  const nextImageLabel = () => {
+    const taken = new Set(doc.nodes.filter((n) => n.type === 'image').map((n) => n.label));
+    let i = 1;
+    while (taken.has(`Ảnh ${i}`)) i += 1;
+    return `Ảnh ${i}`;
+  };
+
   const addNode = (type) => {
     const center = screenToCanvas(
       (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 400) / 2,
@@ -871,7 +825,7 @@ export default function Canvas() {
       y: Math.round(center.y - NODE_H / 2 + (Math.random() * 40 - 20)),
       width: NODE_W,
       text: '',
-      label: type === 'text' ? 'Văn bản' : type === 'image' ? 'Hình ảnh' : 'Video',
+      label: type === 'text' ? 'Văn bản' : type === 'image' ? nextImageLabel() : 'Video',
     };
     setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
     setSelected([n.id]);
@@ -919,7 +873,7 @@ export default function Canvas() {
         y: Math.round(center.y - NODE_H / 2),
         width: NODE_W,
         text: 'Ảnh tải lên',
-        label: 'Hình ảnh',
+        label: nextImageLabel(),
         mediaUrl: url,
         status: 'done',
       };
@@ -1355,8 +1309,8 @@ export default function Canvas() {
     setBusy(true);
     try {
       const { job } = isImage
-        ? await api.createImage({ prompt: promptText, size: node.size || '1:1', images, ...(node.vip ? { vip: true } : {}) })
-        : await api.createVideo({ prompt: promptText, duration: node.duration || 5, size: node.size || '16:9', images, ...(node.vip ? { vip: true } : {}) });
+        ? await api.createImage({ prompt: promptText, size: node.size || '1:1', images })
+        : await api.createVideo({ prompt: promptText, duration: node.duration || 5, size: node.size || '16:9', images });
       updateNode(node.id, { jobId: job.id, status: 'running', progress: 10, mediaUrl: null, error: null });
       toast('Đã gửi nút để tạo', 'ok');
       refresh();
@@ -1496,11 +1450,14 @@ export default function Canvas() {
   // trên nút (vẫn liền, mép dưới bảng chạm mép trên nút).
   const inspectorNode = inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null;
   const panelInfo = inspectorNode ? (() => {
-    const PANEL_H = 260;
+    // Bảng ngang: cao ~220px, rộng tối thiểu 600px (đủ 3 cột) nhưng không tràn màn hình.
+    const PANEL_H = 220;
     const s = Math.min(1.5, Math.max(0.7, view.z)); // tỉ lệ bảng theo zoom
     const nodeW = inspectorNode.width ?? NODE_W;
-    const scaledW = nodeW * view.z; // chiều rộng hiển thị của nút = của bảng
-    const PANEL_W = scaledW / s; // chiều rộng CSS (chưa scale) để sau khi scale bằng đúng nút
+    const scaledW = nodeW * view.z; // chiều rộng hiển thị của nút
+    const baseW = scaledW / s; // chiều rộng CSS (chưa scale) để sau khi scale bằng đúng nút
+    const maxW = Math.max(320, (vpSize.w - 24) / s);
+    const PANEL_W = Math.min(Math.max(baseW, 600), maxW);
     const scaledH = PANEL_H * s;
     const vh = vpSize.h;
     const nx = inspectorNode.x * view.z + view.x;
@@ -1508,7 +1465,10 @@ export default function Canvas() {
     const nBottom = (inspectorNode.y + nodeH(inspectorNode)) * view.z + view.y;
     const below = nBottom + scaledH <= vh;
     const top = below ? nBottom : Math.max(0, ny - scaledH);
-    const left = nx;
+    // Bảng rộng hơn nút nên kẹp trái để không tràn mép phải màn hình.
+    let left = nx;
+    left = Math.min(left, Math.max(0, vpSize.w - PANEL_W * s - 12));
+    left = Math.max(0, left);
     return {
       style: { left, top, width: PANEL_W, transform: `scale(${s})`, transformOrigin: 'top left' },
       placement: below ? 'below' : 'above',
@@ -1611,9 +1571,6 @@ export default function Canvas() {
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
                 onView={() => setViewing(n)}
-                showResize={selected.length === 1 && selected[0] === n.id}
-                onResizeDown={onResizeDown}
-                z={view.z}
                 editing={editingTextId === n.id}
                 assisting={assistingText}
                 onTextChange={(t) => updateNode(n.id, { text: t })}
@@ -1822,12 +1779,12 @@ export default function Canvas() {
           initialTab={sideTab}
         />
 
-        {/* Dock dưới: thanh công cụ chính, cuộn ngang trên màn hẹp */}
-        <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2">
+        {/* Dock trên: thanh công cụ chính, cuộn ngang trên màn hẹp (dưới thanh trên) */}
+        <div className="absolute left-1/2 top-[68px] z-20 -translate-x-1/2">
           <div className="relative">
             {appearanceOpen && (
               <div
-                className="absolute bottom-[calc(100%+10px)] right-0 z-30 w-[240px] rounded-xl border p-3 shadow-xl backdrop-blur"
+                className="absolute right-0 top-[calc(100%+10px)] z-30 w-[240px] rounded-xl border p-3 shadow-xl backdrop-blur"
                 style={{ backgroundColor: theme.node.panelOverlay, borderColor: theme.toolbar.border }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
@@ -1909,8 +1866,8 @@ export default function Canvas() {
           </div>
         </div>
 
-        {/* Bản đồ nhỏ + điều khiển zoom (góc dưới-phải; trên điện thoại đẩy lên trên dock) */}
-        <div className="absolute bottom-24 right-5 z-20 flex flex-col items-end gap-2 md:bottom-5">
+        {/* Bản đồ nhỏ + điều khiển zoom (góc dưới-phải) */}
+        <div className="absolute bottom-5 right-5 z-20 flex flex-col items-end gap-2">
           <ZoomControls
             z={view.z}
             onZoomTo={(target) => zoomBy(target / viewRef.current.z)}
@@ -2121,19 +2078,38 @@ function ToolBtn({ icon: Icon, onClick, active, disabled, danger, title }) {
   );
 }
 
-function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef, showResize, onResizeDown, z = 1, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
+function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
   const isGroup = node.type === 'group';
   const Icon = isText ? Type : node.type === 'image' ? ImageIcon : Video;
-  const title = isText ? 'Câu lệnh văn bản' : node.type === 'image' ? 'Hình ảnh' : 'Xem trước video';
+  const title = node.label || (isText ? 'Câu lệnh văn bản' : node.type === 'image' ? 'Hình ảnh' : 'Xem trước video');
   const role = isText ? 'Đầu vào' : 'Đầu ra';
   const fileName = node.mediaUrl ? decodeURIComponent(node.mediaUrl.split('/').pop().split('?')[0]) : null;
   const nodeW = node.width ?? NODE_W;
   // Chiều cao vùng xem trước theo chiều cao nút (mặc định 214 - 86 = 128px như cũ):
   // kéo đổi cỡ nút ảnh/video thì vùng xem trước to/nhỏ theo.
   const mediaH = Math.max(64, (node.height ?? nodeHGuess(node)) - 86);
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+
+  // Phát/dừng video trong nút (chỉ biểu tượng, KHÔNG tự phát).
+  const togglePlay = (e) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setPlaying(true); }
+    else { v.pause(); setPlaying(false); }
+  };
+  // Phóng to toàn màn hình.
+  const goFullscreen = (e) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else v.requestFullscreen?.();
+  };
 
   // Nhóm: khung viền đứt nét, không media, không nút tạo; chỉ có chấm nối
   // bên phải để làm nguồn nối (nối nhóm vào nút tạo sẽ lấy hết tài nguyên
@@ -2186,29 +2162,6 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
           )}
         />
       ))}
-
-      {/* Tay nắm đổi cỡ ở 4 góc — chỉ khi đúng 1 nút (không phải nhóm) được chọn.
-          Kích thước chia theo zoom để trên màn hình luôn ~12px (ô vuông) / 16px (vùng chạm). */}
-      {showResize && ['nw', 'ne', 'sw', 'se'].map((corner) => {
-        const hs = 16 / z;
-        const vs = 12 / z;
-        const pos = {
-          nw: { left: -hs / 2, top: -hs / 2, cursor: 'nwse-resize' },
-          ne: { right: -hs / 2, top: -hs / 2, cursor: 'nesw-resize' },
-          sw: { left: -hs / 2, bottom: -hs / 2, cursor: 'nesw-resize' },
-          se: { right: -hs / 2, bottom: -hs / 2, cursor: 'nwse-resize' },
-        }[corner];
-        return (
-          <span
-            key={corner}
-            onPointerDown={(e) => onResizeDown(e, node, corner)}
-            className="absolute z-10 grid place-items-center"
-            style={{ width: hs, height: hs, ...pos }}
-          >
-            <span className="block rounded-[2px] border border-brand-400 bg-white shadow" style={{ width: vs, height: vs }} />
-          </span>
-        );
-      })}
 
       {/* Hàng tiêu đề nút: chiều cao cố định (h-6) để khi đang nhập văn bản,
           nút trợ giúp/Xong hiện ra cũng không làm nút đổi kích thước */}
@@ -2273,7 +2226,40 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
           {node.mediaUrl ? (
             <>
               {node.type === 'video' ? (
-                <video src={node.mediaUrl} muted loop playsInline autoPlay className="w-full object-cover" style={{ height: mediaH }} />
+                <>
+                  <video
+                    ref={videoRef}
+                    src={node.mediaUrl}
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    onEnded={() => setPlaying(false)}
+                    className="w-full object-cover"
+                    style={{ height: mediaH }}
+                  />
+                  {/* Nút phát/dừng + phóng to: chỉ biểu tượng, không tự phát */}
+                  <span className="absolute bottom-2 left-2 flex gap-1.5">
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onClick={togglePlay}
+                      title={playing ? 'Dừng' : 'Phát'}
+                      aria-label={playing ? 'Dừng video' : 'Phát video'}
+                      className="grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80"
+                    >
+                      {playing ? <Pause size={13} /> : <Play size={13} />}
+                    </button>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onClick={goFullscreen}
+                      title="Phóng to toàn màn hình"
+                      aria-label="Phóng to toàn màn hình"
+                      className="grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80"
+                    >
+                      <Maximize size={13} />
+                    </button>
+                  </span>
+                </>
               ) : (
                 <img src={node.mediaUrl} alt="" className="w-full object-cover" style={{ height: mediaH }} />
               )}
