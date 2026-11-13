@@ -138,7 +138,6 @@ export default function Canvas() {
   const pinchRef = useRef(null);
   const docRef = useRef(doc);
   docRef.current = doc;
-  const creating60Ref = useRef(new Set()); // id nút 60s đang tạo thêm đoạn (chống tạo trùng)
   const viewRef = useRef(view);
   viewRef.current = view;
   const selectedRef = useRef(selected);
@@ -1278,40 +1277,6 @@ export default function Canvas() {
     return ids.map((id) => d.nodes.find((n) => n.id === id)).filter(Boolean);
   };
 
-  // Video 60s = 6 đoạn × 10s (cùng câu lệnh + ảnh tham chiếu), chạy song song
-  // tối đa bằng số tài khoản đang rảnh, xong thì nối lại thành 1 video 60s.
-  // Các đoạn còn lại được tạo dần trong syncJobs khi có slot trống.
-  const SEG60_TOTAL = 6;
-  const SEG60_DUR = 10;
-  const generate60s = async (node, promptText, images) => {
-    setBusy(true);
-    try {
-      let concurrency = 2;
-      try {
-        const acc = await api.accounts();
-        const usable = acc?.summary?.usable || 1;
-        concurrency = Math.min(3, Math.max(1, usable));
-      } catch { /* giữ mặc định 2 */ }
-      const first = Math.min(concurrency, SEG60_TOTAL);
-      const ids = [];
-      for (let i = 0; i < first; i++) {
-        const { job } = await api.createVideo({ prompt: promptText, duration: SEG60_DUR, size: node.size || '16:9', images });
-        ids.push(job.id);
-      }
-      updateNode(node.id, {
-        segmentJobIds: ids, segmentsTotal: SEG60_TOTAL, segmentConcurrency: concurrency,
-        segmentPrompt: promptText, segmentImages: images,
-        jobId: null, status: 'running', progress: 5, mediaUrl: null, error: null,
-      });
-      toast(`Đã gửi video 60 giây — đang tạo ${ids.length} đoạn đầu`, 'ok');
-      refresh();
-    } catch (e) {
-      toast(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   // Tạo nội dung cho 1 nút ảnh/video từ các nút nối vào nó
   const generateNode = async (node) => {
     if (!node || node.type === 'text' || node.type === 'group') return;
@@ -1334,10 +1299,6 @@ export default function Canvas() {
     const textInputs = expanded.filter((n) => n.type === 'text' && n.text?.trim()).map((n) => n.text.trim());
     const promptText = node.text?.trim() || textInputs.join('\n') || '';
     if (promptText.length < 2) return toast('Nút này chưa có câu lệnh — nhập câu lệnh hoặc nối một nút văn bản vào', 'error');
-    // Video 60s: 6 đoạn × 10s nối lại (xem generate60s)
-    if (node.type === 'video' && (node.duration || 5) === 60) {
-      return generate60s(node, promptText, images);
-    }
     const isImage = node.type === 'image';
     setBusy(true);
     try {
@@ -1426,112 +1387,40 @@ export default function Canvas() {
 
   /* ---------------- 生成 ---------------- */
   /* ---------------- 任务轮询 ---------------- */
-  const stitching60Ref = useRef(new Set()); // id nút 60s đang nối video (chống nối trùng)
   const syncJobs = useCallback(async () => {
-    // --- Nút thường: 1 job ---
     const running = doc.nodes.filter((n) => n.jobId && n.status === 'running');
-    if (running.length) {
-      const results = await Promise.all(
-        running.map(async (n) => {
-          try { return { id: n.id, job: (await api.job(n.jobId)).job }; } catch { return null; }
-        })
-      );
-      let justDone = null;
-      // Cập nhật tiến độ job không ghi vào lịch sử hoàn tác
-      historyPausedRef.current = true;
-      setDoc((d) => ({
-        ...d,
-        nodes: d.nodes.map((n) => {
-          const hit = results.find((r) => r?.id === n.id)?.job;
-          if (!hit) return n;
-          if (hit.status === 'completed') {
-            const done = { ...n, status: 'done', mediaUrl: hit.mediaUrl || hit.result?.url };
-            // Nút nào đang mở bảng cấu hình thì tự mở xem khi tạo xong
-            if (inspectorIdRef.current === n.id) justDone = done;
-            return done;
-          }
-          if (hit.status === 'failed') {
-            return { ...n, status: 'failed', error: hit.error };
-          }
-          return { ...n, progress: hit.progress };
-        }),
-      }));
-      historyPausedRef.current = false;
-      if (justDone) setViewing(justDone);
-    }
-
-    // --- Nút video 60s: 6 đoạn × 10s ---
-    const nodes60 = doc.nodes.filter((n) =>
-      n.type === 'video' && (n.duration || 5) === 60
-      && n.segmentJobIds?.length && n.status === 'running');
-    for (const n of nodes60) {
-      if (stitching60Ref.current.has(n.id)) continue;
-      const total = n.segmentsTotal || 6;
-      const concurrency = n.segmentConcurrency || 2;
-      const ids = n.segmentJobIds;
-      const results = await Promise.all(ids.map(async (id) => {
-        try { return (await api.job(id)).job; } catch { return null; }
-      }));
-      const done = results.filter((j) => j?.status === 'completed');
-      const failed = results.find((j) => j?.status === 'failed');
-      if (failed) {
-        const idx = ids.indexOf(failed.id);
-        updateNode(n.id, { status: 'failed', error: `Đoạn ${idx + 1} thất bại: ${failed.error || ''}` });
-        continue;
-      }
-      const runningCount = results.filter((j) => j && !['completed', 'failed'].includes(j.status)).length;
-      // Đủ 6 đoạn và tất cả xong → nối thành 1 video 60s
-      if (ids.length >= total && done.length >= total) {
-        stitching60Ref.current.add(n.id);
-        updateNode(n.id, { progress: 95 });
-        try {
-          const out = await api.stitchVideos(ids);
-          const cur = docRef.current.nodes.find((x) => x.id === n.id);
-          updateNode(n.id, { status: 'done', mediaUrl: out.url, progress: 100, segmentJobIds: null, error: null });
-          if (inspectorIdRef.current === n.id && cur) setViewing({ ...cur, mediaUrl: out.url, status: 'done', progress: 100 });
-        } catch (e) {
-          updateNode(n.id, { status: 'failed', error: e.message });
-        } finally {
-          stitching60Ref.current.delete(n.id);
+    if (!running.length) return;
+    const results = await Promise.all(
+      running.map(async (n) => {
+        try { return { id: n.id, job: (await api.job(n.jobId)).job }; } catch { return null; }
+      })
+    );
+    let justDone = null;
+    // Cập nhật tiến độ job không ghi vào lịch sử hoàn tác
+    historyPausedRef.current = true;
+    setDoc((d) => ({
+      ...d,
+      nodes: d.nodes.map((n) => {
+        const hit = results.find((r) => r?.id === n.id)?.job;
+        if (!hit) return n;
+        if (hit.status === 'completed') {
+          const done = { ...n, status: 'done', mediaUrl: hit.mediaUrl || hit.result?.url };
+          // Nút nào đang mở bảng cấu hình thì tự mở xem khi tạo xong
+          if (inspectorIdRef.current === n.id) justDone = done;
+          return done;
         }
-        continue;
-      }
-      // Bơm thêm đoạn mới khi còn slot trống (tối đa = số tài khoản đang rảnh)
-      if (ids.length < total && runningCount < concurrency && !creating60Ref.current.has(n.id)) {
-        creating60Ref.current.add(n.id);
-        try {
-          const need = Math.min(concurrency - runningCount, total - ids.length);
-          const newIds = [];
-          for (let i = 0; i < need; i++) {
-            const { job } = await api.createVideo({
-              prompt: n.segmentPrompt || n.text || '',
-              duration: 10, size: n.size || '16:9', images: n.segmentImages || [],
-            });
-            newIds.push(job.id);
-          }
-          if (newIds.length) {
-            const cur = docRef.current.nodes.find((x) => x.id === n.id);
-            if (cur && cur.status === 'running') {
-              updateNode(n.id, { segmentJobIds: [...(cur.segmentJobIds || []), ...newIds] });
-            }
-          }
-        } catch (e) {
-          // Tạo đoạn mới thất bại (vd: hết tài khoản rảnh): để lần sync sau thử lại
-          console.warn('[canvas 60s] tạo đoạn mới thất bại', e.message);
-        } finally {
-          creating60Ref.current.delete(n.id);
+        if (hit.status === 'failed') {
+          return { ...n, status: 'failed', error: hit.error };
         }
-      }
-      // Tiến độ = số đoạn xong / 6
-      const pct = Math.round((done.length / total) * 90);
-      if (pct !== (n.progress || 0)) updateNode(n.id, { progress: pct });
-    }
+        return { ...n, progress: hit.progress };
+      }),
+    }));
+    historyPausedRef.current = false;
+    if (justDone) setViewing(justDone);
   }, [doc.nodes]);
 
   useEffect(() => {
-    const hasRunning = doc.nodes.some((n) =>
-      (n.jobId && n.status === 'running')
-      || (n.type === 'video' && (n.duration || 5) === 60 && n.segmentJobIds?.length && n.status === 'running'));
+    const hasRunning = doc.nodes.some((n) => n.jobId && n.status === 'running');
     if (!hasRunning) return undefined;
     const t = setInterval(syncJobs, 2500);
     return () => clearInterval(t);
