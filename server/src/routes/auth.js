@@ -1,11 +1,38 @@
 import { Router } from 'express';
-import { db, getSetting } from '../db.js';
+import { db, getSetting, isVip, userTodayVideoCount, getDailyVideoLimit } from '../db.js';
 import {
   createUser, findUserByEmail, verifyPassword, signToken, publicUser,
   requireAuth, hashPassword, inviteCodeOf, findByInviteCode, invitedUsers,
 } from '../auth.js';
 
 const r = Router();
+
+/* Hồ sơ mở rộng cho trang cá nhân: publicUser + VIP, hạn mức ngày và số lượt
+ * đã dùng hôm nay. Không bao giờ ném lỗi ở các trường phụ: helper nào lỗi
+ * thì trường đó về null/0 để endpoint vẫn trả về được. */
+function profileUser(userId) {
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!row) return null;
+  const base = publicUser(row);
+  let vip = false;
+  let dailyLimit = null;
+  let todayCount = 0;
+  try { vip = isVip(userId); } catch { /* giữ false */ }
+  try { dailyLimit = getDailyVideoLimit(userId); } catch { /* giữ null */ }
+  try { todayCount = userTodayVideoCount(userId); } catch { /* giữ 0 */ }
+  return {
+    ...base,
+    vipExpiresAt: row.vip_expires_at ?? null,
+    isVip: vip,
+    dailyVideoLimit: dailyLimit,
+    todayVideoCount: todayCount,
+    limits: {
+      daily_video_limit: row.daily_video_limit ?? null,
+      max_concurrent_jobs: row.max_concurrent_jobs ?? null,
+      media_max_mb: row.media_max_mb ?? null,
+    },
+  };
+}
 
 r.post('/register', (req, res) => {
   const { email, password, name, ref } = req.body || {};
@@ -47,7 +74,7 @@ r.post('/login', (req, res) => {
 });
 
 r.get('/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user) });
+  res.json({ user: profileUser(req.user.id) });
 });
 
 r.patch('/me', requireAuth, (req, res) => {
@@ -60,7 +87,7 @@ r.patch('/me', requireAuth, (req, res) => {
     if (String(password).length < 6) return res.status(400).json({ error: 'Mật khẩu mới ít nhất 6 ký tự' });
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), req.user.id);
   }
-  res.json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });
+  res.json({ user: profileUser(req.user.id) });
 });
 
 export default r;
