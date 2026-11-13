@@ -59,6 +59,9 @@ export const api = {
   deleteJob: (id) => request(`/api/jobs/${id}`, { method: 'DELETE' }),
   mediaStats: () => request('/api/media-stats'),
 
+  getCanvas: () => request('/api/canvas'),
+  saveCanvas: (doc) => request('/api/canvas', { method: 'PUT', body: { doc } }),
+
   upload: (files) => {
     const fd = new FormData();
     for (const f of files) fd.append('files', f);
