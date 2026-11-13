@@ -97,8 +97,8 @@ export default function NodeInspector({
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-stretch gap-3">
-        {/* Cột trái: tên + câu lệnh + nhờ Muse viết prompt */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* Cột trái: tên + câu lệnh + nhờ Muse viết prompt (ưu tiên, không bị ép dẹp) */}
+        <div className="flex min-w-[160px] flex-1 flex-col">
           <div className="mb-2 flex items-center gap-2">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-ink-800">
               <Icon size={13} className="text-brand-400" />
@@ -139,15 +139,15 @@ export default function NodeInspector({
           </button>
         </div>
 
-        {/* Cột giữa: Đầu vào Ở TRÊN, Thông số Ở DƯỚI */}
+        {/* Cột giữa: Đầu vào Ở TRÊN, Thông số Ở DƯỚI (co lại trước khi màn hẹp) */}
         {!isText && (
-          <div className="flex w-[248px] shrink-0 flex-col">
+          <div className="flex w-[210px] shrink flex-col">
             {/* Đầu vào (chỉ nút ảnh/video): ảnh tham chiếu nối vào.
                 Mỗi đầu vào có tên nút (Ảnh 1, Ảnh 2…) + nút bật/tắt riêng
                 (lưu trên nút này, hoàn tác được); đầu vào bị tắt thì lúc tạo sẽ bỏ qua. */}
             <div>
               <p className="mb-1.5 text-[11px] text-mist-400">Đầu vào ({inputs.length}):</p>
-              {inputs.length > 0 ? (
+              {inputs.length > 0 && (
                 <div className="flex flex-wrap items-start gap-2">
                   {inputs.map((n) => {
                     const off = (node.disabledInputs || []).includes(n.id);
@@ -188,10 +188,6 @@ export default function NodeInspector({
                     );
                   })}
                 </div>
-              ) : (
-                <p className="text-[11px] leading-relaxed text-mist-400">
-                  Chưa có đầu vào — kéo chấm tròn từ nút văn bản/ảnh vào nút này để thêm tham chiếu.
-                </p>
               )}
             </div>
             {/* Thông số */}
@@ -225,7 +221,7 @@ export default function NodeInspector({
         )}
 
         {/* Cột phải: tạo / tải lên / xóa */}
-        <div className="flex w-[92px] shrink-0 flex-col gap-2">
+        <div className="flex w-[80px] shrink-0 flex-col gap-2">
           {isImage && (
             <button
               onClick={() => fileRef.current?.click()}
