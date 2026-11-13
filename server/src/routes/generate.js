@@ -11,7 +11,6 @@ import {
 } from '../db.js';
 import * as muse from '../muse.js';
 import { pickAccountForUser, PICK_ERRORS } from '../lib/accounts.js';
-import { stitchVideos } from '../lib/stitch.js';
 
 const r = Router();
 
@@ -262,44 +261,6 @@ r.delete('/jobs/:id', requireAuth, (req, res) => {
   }
   db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);
   res.json({ ok: true });
-});
-
-/* ------------------ Nối nhiều video 10s thành 1 video dài (Canvas 60s) ------------------ */
-// Nối các đoạn video đã tạo xong (mỗi đoạn 10s) thành một video dài.
-// Body: { jobIds: [id1, id2, ...] } — mỗi job phải thuộc về user, là video,
-// đã hoàn thành và có file media cục bộ. Trả về { url, file, duration }.
-r.post('/videos/stitch', requireAuth, async (req, res) => {
-  const { jobIds } = req.body || {};
-  if (!Array.isArray(jobIds) || jobIds.length < 2) {
-    return res.status(400).json({ error: 'Cần ít nhất 2 video để nối' });
-  }
-  if (jobIds.length > 12) {
-    return res.status(400).json({ error: 'Tối đa 12 đoạn mỗi lần nối' });
-  }
-  const files = [];
-  for (const id of jobIds) {
-    const job = getJob(String(id));
-    if (!job) return res.status(404).json({ error: `Tác vụ không tồn tại: ${id}` });
-    if (job.userId !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Không có quyền dùng video này' });
-    }
-    if (job.type !== 'video' || job.status !== 'completed' || !job.mediaFile) {
-      return res.status(400).json({ error: `Video chưa sẵn sàng để nối: ${id}` });
-    }
-    const f = path.join(MEDIA_DIR, path.basename(job.mediaFile));
-    if (!fs.existsSync(f)) {
-      return res.status(400).json({ error: `Thiếu file video: ${path.basename(job.mediaFile)}` });
-    }
-    files.push(f);
-  }
-  const outName = `${uid('stitched_')}.mp4`;
-  try {
-    await stitchVideos(files, outName);
-    const total = files.length * 10;
-    res.json({ url: `/media/${outName}`, file: outName, duration: total, segments: files.length });
-  } catch (e) {
-    res.status(502).json({ error: `Nối video thất bại: ${e.message}` });
-  }
 });
 
 /* --------------------------- 元信息 / 定价 --------------------------- */
