@@ -134,9 +134,6 @@ export default function Canvas() {
 
   const viewportRef = useRef(null);
   const dragRef = useRef(null); // { mode:'pan'|'node'|'link', ... }
-  // Vừa kéo nút xong thì bấm (click) ngay sau đó không được mở xem to —
-  // trình duyệt vẫn bắn click sau pointerup dù đã kéo nút đi xa.
-  const justDraggedRef = useRef(false);
   // Chụm 2 ngón để zoom (cảm ứng): { pointers: Map<id,{x,y}>, startDist, startZ, startMid, startView }
   const pinchRef = useRef(null);
   const docRef = useRef(doc);
@@ -448,8 +445,6 @@ export default function Canvas() {
     // Chọn nhiều thì đóng bảng; bấm đơn thì mở bảng ở lúc nhả chuột (xem onUp)
     // để kéo di chuyển nút không bật bảng lên
     if (multi) setInspectorId(null);
-    // Bấm vào ảnh/video của nút thì mở xem to (không mở bảng); bấm chỗ khác thì mở bảng
-    const fromMedia = !!e.target?.closest?.('[data-media]');
     // Kéo 1 nhóm thì các thành viên đi cùng; kéo nhiều nút thì ghi lại vị trí
     // gốc của tất cả nút sẽ di chuyển (kể cả thành viên của nhóm được chọn).
     const baseIds = multi ? [...selectedRef.current, node.id] : [node.id];
@@ -465,7 +460,6 @@ export default function Canvas() {
     dragRef.current = {
       mode: 'node',
       id: node.id,
-      fromMedia,
       startX: e.clientX,
       startY: e.clientY,
       nodeX: node.x,
@@ -588,31 +582,18 @@ export default function Canvas() {
         return;
       }
       if (d.mode === 'node') {
-        // Bấm (không kéo) vào nút: bấm vào ảnh/video thì mở xem to; nút văn bản
-        // thì nhập trực tiếp trong nút; nút ảnh/video thì mở bảng cấu hình
+        // Bấm (không kéo) vào nút thì mở bảng điều khiển; nút văn bản thì nhập
+        // trực tiếp trong nút. Chỉ nút phóng to (góc phải ảnh/video) mới mở xem to.
         const moved = e && e.clientX != null ? Math.hypot(e.clientX - d.startX, e.clientY - d.startY) : 99;
-        if (moved >= 6) {
-          // Vừa kéo nút — chặn click bắn sau pointerup mở xem to nhầm
-          justDraggedRef.current = true;
-          setTimeout(() => { justDraggedRef.current = false; }, 120);
-        }
         if (moved < 6) {
-          if (d.fromMedia) {
-            const node = docRef.current.nodes.find((n) => n.id === d.id);
-            if (node?.mediaUrl) {
-              setInspectorId(null); // đóng bảng để xem to không bị bảng che
-              setViewing(node);
-            }
-          } else {
-            const node = docRef.current.nodes.find((n) => n.id === d.id);
-            // Nhóm không có bảng cấu hình riêng
-            if (node?.type === 'text') {
-              setInspectorId(null);
-              setEditingTextId(d.id);
-            } else if (node?.type !== 'group') {
-              setEditingTextId(null);
-              setInspectorId(d.id);
-            }
+          const node = docRef.current.nodes.find((n) => n.id === d.id);
+          // Nhóm không có bảng cấu hình riêng
+          if (node?.type === 'text') {
+            setInspectorId(null);
+            setEditingTextId(d.id);
+          } else if (node?.type !== 'group') {
+            setEditingTextId(null);
+            setInspectorId(d.id);
           }
           return;
         }
@@ -1571,7 +1552,6 @@ export default function Canvas() {
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
                 onView={() => { setInspectorId(null); setViewing(n); }}
-                suppressViewRef={justDraggedRef}
                 onDoubleClick={() => renameGroup(n)}
               />
             ))}
@@ -1585,7 +1565,6 @@ export default function Canvas() {
                 onPointerDown={(e) => onNodeDown(e, n)}
                 onPortDown={(e) => onPortDown(e, n)}
                 onView={() => { setInspectorId(null); setViewing(n); }}
-                suppressViewRef={justDraggedRef}
                 editing={editingTextId === n.id}
                 assisting={assistingText}
                 onTextChange={(t) => updateNode(n.id, { text: t })}
@@ -2093,7 +2072,7 @@ function ToolBtn({ icon: Icon, onClick, active, disabled, danger, title }) {
   );
 }
 
-function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, suppressViewRef, nodeRef, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
+function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, onDoubleClick, onView, nodeRef, editing = false, assisting = false, onTextChange, onTextDone, onAssist }) {
   const running = node.status === 'running';
   const failed = node.status === 'failed';
   const isText = node.type === 'text';
@@ -2237,17 +2216,7 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
           </p>
         )
       ) : (
-        <div
-          data-media
-          className="relative cursor-pointer overflow-hidden rounded-xl bg-black/40"
-          title="Bấm để xem to"
-          style={{ height: mediaH }}
-          onClick={(e) => {
-            if (e.target.closest('button')) return;
-            if (suppressViewRef?.current) return;
-            if (node.mediaUrl) onView?.();
-          }}
-        >
+        <div className="relative overflow-hidden rounded-xl bg-black/40" style={{ height: mediaH }}>
           {node.mediaUrl ? (
             <>
               {node.type === 'video' ? (
@@ -2288,9 +2257,17 @@ function CanvasNode({ node, active, showInfo = true, onPointerDown, onPortDown, 
               ) : (
                 <img src={node.mediaUrl} alt="" className="w-full object-cover" style={{ height: mediaH }} />
               )}
-              <span className="pointer-events-none absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white backdrop-blur">
+              {/* Nút phóng to: chỉ nút này mới mở xem to; bấm chỗ khác trên nút
+                  thì mở bảng điều khiển */}
+              <button
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onClick={onView}
+                title="Xem to"
+                aria-label="Xem to"
+                className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80"
+              >
                 <Expand size={13} />
-              </span>
+              </button>
             </>
           ) : (
             <div className="grid place-items-center bg-[radial-gradient(circle_at_30%_20%,rgba(15,169,138,.14),transparent_60%)]" style={{ height: mediaH }}>
