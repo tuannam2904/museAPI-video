@@ -13,6 +13,7 @@ import Works from './pages/Works.jsx';
 import Admin from './pages/Admin.jsx';
 import Bind from './pages/Bind.jsx';
 import VipPage from './pages/VipPage.jsx';
+import Profile from './pages/Profile.jsx';
 
 function Boot() {
   return <div className="grid h-full place-items-center bg-ink-900 text-brand-400"><Spinner size={26} /></div>;
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/works" element={<Works />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/vip" element={<VipPage />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
 
