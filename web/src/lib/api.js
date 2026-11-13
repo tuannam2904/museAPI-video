@@ -34,7 +34,6 @@ export const api = {
   invite: () => request('/api/auth/invite'),
   me: () => request('/api/auth/me'),
   updateMe: (b) => request('/api/auth/me', { method: 'PATCH', body: b }),
-  ledger: () => request('/api/auth/ledger'),
 
   meta: () => request('/api/meta'),
 
@@ -81,7 +80,6 @@ export const api = {
   adminDeleteUser: (id) => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
   adminResetPassword: (id, password) => request(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: { password } }),
   adminSetLimits: (id, limits) => request(`/api/admin/users/${id}/limits`, { method: 'PATCH', body: limits }),
-  adminLedger: (params) => request(`/api/admin/ledger?${new URLSearchParams(params || {})}`),
   adminAudit: (limit) => request(`/api/admin/audit?limit=${limit || 100}`),
   adminPatchUser: (id, b) => request(`/api/admin/users/${id}`, { method: 'PATCH', body: b }),
   adminCreateUser: (b) => request('/api/admin/users', { method: 'POST', body: b }),
@@ -122,7 +120,6 @@ export const api = {
   clearQueueAll: () => request('/api/queue', { method: 'DELETE' }),
 
   team: () => request('/api/team'),
-  transferCredits: (email, credits) => request('/api/team/transfer', { method: 'POST', body: { email, credits } }),
   joinTeam: (code) => request('/api/team/join', { method: 'POST', body: { code } }),
 
   chatModels: () => request('/api/chat/models'),
