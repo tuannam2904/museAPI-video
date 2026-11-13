@@ -202,7 +202,7 @@ export default function NodeInspector({
             ))}
           </div>
           <span className="ml-auto font-mono text-[10.5px] text-mist-400">
-            {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : `${cost} điểm`}
+            {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : (isVideo && node.vip ? 'VIP · không tốn điểm' : `${cost} điểm`)}
           </span>
         </div>
       )}
