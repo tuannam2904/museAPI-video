@@ -258,6 +258,20 @@ for (const col of ['daily_credit_cap INTEGER', 'max_concurrent_jobs INTEGER', 'm
 try { db.exec('ALTER TABLE accounts ADD COLUMN vip INTEGER NOT NULL DEFAULT 0'); } catch { /* đã có */ }
 try { db.exec('ALTER TABLE users ADD COLUMN vip_expires_at INTEGER'); } catch { /* đã có */ }
 
+// Prompt-writer pool: nhiều tài khoản có thể làm prompt-writer (accounts.prompt_writer = 1),
+// thay cho setting cũ prompt_writer_account_id chỉ cho phép đúng 1 tài khoản.
+try { db.exec('ALTER TABLE accounts ADD COLUMN prompt_writer INTEGER NOT NULL DEFAULT 0'); } catch { /* đã có */ }
+
+// Di chuyển một lần từ setting cũ sang cột prompt_writer (lũy tiến, bỏ qua khi lỗi).
+try {
+  const legacy = db.prepare("SELECT value FROM settings WHERE key = 'prompt_writer_account_id'").get();
+  if (legacy?.value) {
+    const acc = db.prepare('SELECT id FROM accounts WHERE id = ?').get(legacy.value);
+    if (acc) db.prepare('UPDATE accounts SET prompt_writer = 1 WHERE id = ?').run(acc.id);
+    db.prepare("DELETE FROM settings WHERE key = 'prompt_writer_account_id'").run();
+  }
+} catch { /* bỏ qua */ }
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS admin_audit (
   id         TEXT PRIMARY KEY,
