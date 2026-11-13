@@ -1451,8 +1451,10 @@ export default function Canvas() {
   const inspectorNode = inspectorId ? doc.nodes.find((n) => n.id === inspectorId) : null;
   const panelInfo = inspectorNode ? (() => {
     // Bảng ngang: cao ~220px, rộng tối thiểu 600px (đủ 3 cột) nhưng không tràn màn hình.
+    // Tỉ lệ bảng KHÔNG phóng to theo zoom (tối đa 1.0): phóng to theo zoom sẽ
+    // bóp chiều rộng CSS của bảng lại và làm cột nhập text bị ép dẹp khi zoom to.
     const PANEL_H = 220;
-    const s = Math.min(1.5, Math.max(0.7, view.z)); // tỉ lệ bảng theo zoom
+    const s = Math.min(1.0, Math.max(0.7, view.z)); // tỉ lệ bảng theo zoom, tối đa 1.0
     const nodeW = inspectorNode.width ?? NODE_W;
     const scaledW = nodeW * view.z; // chiều rộng hiển thị của nút
     const baseW = scaledW / s; // chiều rộng CSS (chưa scale) để sau khi scale bằng đúng nút
