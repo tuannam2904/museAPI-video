@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, now, getSetting, addCredits } from '../db.js';
+import { db, getSetting } from '../db.js';
 import {
   createUser, findUserByEmail, verifyPassword, signToken, publicUser,
   requireAuth, hashPassword, inviteCodeOf, findByInviteCode, invitedUsers,
@@ -14,18 +14,9 @@ r.post('/register', (req, res) => {
   if (!password || String(password).length < 6) return res.status(400).json({ error: 'Mật khẩu ít nhất 6 ký tự' });
   if (findUserByEmail(email)) return res.status(409).json({ error: 'Email này đã được đăng ký' });
 
-  // 邀请关系：邀请人 +50，被邀请人额外 +50
+  // Quan hệ mời: chỉ ghi lại người giới thiệu, không còn thưởng điểm.
   const inviter = ref ? findByInviteCode(ref) : null;
   const user = createUser({ email, password, name, invitedBy: inviter?.id || null });
-
-  if (inviter) {
-    try {
-      addCredits(inviter.id, 50, `Mời người dùng mới ${user.email.split('@')[0]}`);
-      addCredits(user.id, 50, 'Thưởng đăng ký theo lời mời');
-    } catch (e) {
-      console.error('[invite] 奖励发放失败', e.message);
-    }
-  }
 
   res.json({ token: signToken(user), user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) });
 });
@@ -42,7 +33,6 @@ r.get('/invite', requireAuth, (req, res) => {
       name: u.name || u.email.split('@')[0],
       createdAt: u.created_at,
     })),
-    reward: { inviter: 50, invitee: 50 },
   });
 });
 
@@ -71,13 +61,6 @@ r.patch('/me', requireAuth, (req, res) => {
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(password)), req.user.id);
   }
   res.json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)) });
-});
-
-r.get('/ledger', requireAuth, (req, res) => {
-  const rows = db
-    .prepare('SELECT * FROM ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 100')
-    .all(req.user.id);
-  res.json({ ledger: rows });
 });
 
 export default r;

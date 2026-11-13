@@ -4,9 +4,9 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { requireAuth } from '../auth.js';
 import { MEDIA_DIR } from '../config.js';
-import { db, uid, now, createJob, getJob, updateJob, addCredits, priceOf } from '../db.js';
+import { db, uid, now, createJob, getJob, updateJob } from '../db.js';
 import * as muse from '../muse.js';
-import { normalizeRefs, checkUserLimits } from './generate.js';
+import { normalizeRefs, checkUserLimits, checkDailyVideoLimit } from './generate.js';
 import { chatWithPromptWriter } from '../lib/promptWriter.js';
 import { pickAccountForUser, PICK_ERRORS, isVipUser } from '../lib/accounts.js';
 
@@ -253,6 +253,23 @@ function failScene(sceneId, message) {
     .run(String(message).slice(0, 300), now(), sceneId);
 }
 
+/** Kiểm tra giới hạn trước khi tạo 1 job phim: số job chạy cùng lúc (mọi mode)
+ * + giới hạn số video/ngày (chỉ lượt thường — lượt VIP đã có giới hạn lượt/ngày
+ * riêng của acc VIP). Ném lỗi mang status 429 khi hết lượt trong ngày, để
+ * route trả đúng mã HTTP. */
+function enforceFilmLimits(userId, isVip) {
+  const limitErr = checkUserLimits(userId);
+  if (limitErr) throw new Error(limitErr);
+  if (!isVip) {
+    const dailyErr = checkDailyVideoLimit(userId);
+    if (dailyErr) {
+      const e = new Error(dailyErr);
+      e.status = 429;
+      throw e;
+    }
+  }
+}
+
 /* ------------------------- tạo ảnh / video cho 1 cảnh ------------------------- */
 
 async function createSceneImage(userId, scene, aspect) {
@@ -276,22 +293,16 @@ async function createSceneImage(userId, scene, aspect) {
     refs = normalizeRefs(photos);
   } catch { refs = []; }
   const params = { size: ASPECTS.includes(aspect) ? aspect : '9:16' };
-  const cost = priceOf('image', params);
   // Chủ phim có VIP → dùng acc VIP của admin; không VIP → chỉ acc của chính chủ phim.
-  // Chọn acc TRƯỚC để biết có phải lượt VIP (miễn phí điểm) không.
+  // Chọn acc TRƯỚC để biết có phải lượt VIP không (lượt VIP không chịu giới hạn số video/ngày).
   const pick = await pickAccountForUser(userId, { vip: isVipUser(userId) });
   if (pick.error) throw new Error((PICK_ERRORS[pick.error] || {}).message || 'Không chọn được tài khoản');
   const isVip = pick.mode === 'vip';
   params.accountMode = pick.mode;
   params.accountId = pick.platformId;
-  if (!isVip) {
-    const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
-    if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo ảnh cần ${cost})`);
-  }
-  const limitErr = checkUserLimits(userId, cost, { skipPoints: isVip });
-  if (limitErr) throw new Error(limitErr);
-  const job = createJob(userId, 'image', prompt, params, isVip ? 0 : cost);
-  if (!isVip) addCredits(userId, -cost, 'Film: tạo ảnh cảnh', job.id);
+  enforceFilmLimits(userId, isVip);
+  // Không còn hệ điểm: mọi job đều ghi cost = 0.
+  const job = createJob(userId, 'image', prompt, params, 0);
   try {
     const payload = { prompt, model: 'muse-image', size: params.size, account_id: pick.upstreamId };
     if (refs.length) payload.images = refs;
@@ -304,10 +315,6 @@ async function createSceneImage(userId, scene, aspect) {
     return job;
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    if (!isVip) {
-      addCredits(userId, cost, 'Film: hoàn điểm khi tạo ảnh thất bại', job.id);
-      updateJob(job.id, { refunded: 1 });
-    }
     throw e;
   }
 }
@@ -320,22 +327,16 @@ async function createSceneVideo(userId, project, scene) {
     size: ASPECTS.includes(project.aspect) ? project.aspect : '9:16',
     images: scene.imageMedia ? [scene.imageMedia] : [],
   };
-  const cost = priceOf('video', params);
   // Chủ phim có VIP → dùng acc VIP của admin; không VIP → chỉ acc của chính chủ phim.
-  // Chọn acc TRƯỚC để biết có phải lượt VIP (miễn phí điểm) không.
+  // Chọn acc TRƯỚC để biết có phải lượt VIP không (lượt VIP không chịu giới hạn số video/ngày).
   const pick = await pickAccountForUser(userId, { vip: isVipUser(userId) });
   if (pick.error) throw new Error((PICK_ERRORS[pick.error] || {}).message || 'Không chọn được tài khoản');
   const isVip = pick.mode === 'vip';
   params.accountMode = pick.mode;
   params.accountId = pick.platformId;
-  if (!isVip) {
-    const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
-    if (!user || user.credits < cost) throw new Error(`Không đủ điểm (tạo video cần ${cost})`);
-  }
-  const limitErr = checkUserLimits(userId, cost, { skipPoints: isVip });
-  if (limitErr) throw new Error(limitErr);
-  const job = createJob(userId, 'video', prompt, params, isVip ? 0 : cost);
-  if (!isVip) addCredits(userId, -cost, 'Film: tạo video cảnh', job.id);
+  enforceFilmLimits(userId, isVip);
+  // Không còn hệ điểm: mọi job đều ghi cost = 0.
+  const job = createJob(userId, 'video', prompt, params, 0);
   try {
     const refs = normalizeRefs(params.images);
     const payload = { prompt, model: 'muse-video', duration: params.duration, size: params.size, account_id: pick.upstreamId };
@@ -349,10 +350,6 @@ async function createSceneVideo(userId, project, scene) {
     return job;
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    if (!isVip) {
-      addCredits(userId, cost, 'Film: hoàn điểm khi tạo video thất bại', job.id);
-      updateJob(job.id, { refunded: 1 });
-    }
     throw e;
   }
 }
@@ -613,9 +610,8 @@ r.post('/films/:id/characters/:charId/portrait', requireAuth, async (req, res) =
   if (!ch) return res.status(404).json({ error: 'Không tìm thấy nhân vật' });
   const prompt = `Chân dung nhân vật ${ch.name}: ${ch.description}. Phong cách ${p.style}, tỷ lệ ${p.aspect}, chính diện, rõ mặt, ánh sáng tự nhiên.`.trim();
   const params = { size: ASPECTS.includes(p.aspect) ? p.aspect : '9:16' };
-  const cost = priceOf('image', params);
   // Chủ phim có VIP → dùng acc VIP của admin; không VIP → chỉ acc của chính chủ phim.
-  // Chọn acc TRƯỚC để biết có phải lượt VIP (miễn phí điểm) không.
+  // Chọn acc TRƯỚC để biết có phải lượt VIP không (lượt VIP không chịu giới hạn số video/ngày).
   const pick = await pickAccountForUser(req.user.id, { vip: isVipUser(req.user.id) });
   if (pick.error) {
     const e = PICK_ERRORS[pick.error] || { status: 400, message: 'Không chọn được tài khoản' };
@@ -624,14 +620,14 @@ r.post('/films/:id/characters/:charId/portrait', requireAuth, async (req, res) =
   const isVip = pick.mode === 'vip';
   params.accountMode = pick.mode;
   params.accountId = pick.platformId;
-  if (!isVip) {
-    const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(req.user.id);
-    if (!user || user.credits < cost) return res.status(502).json({ error: `Không đủ điểm (tạo chân dung cần ${cost})` });
-  }
-  const limitErr = checkUserLimits(req.user.id, cost, { skipPoints: isVip });
+  const limitErr = checkUserLimits(req.user.id);
   if (limitErr) return res.status(400).json({ error: limitErr });
-  const job = createJob(req.user.id, 'image', prompt, params, isVip ? 0 : cost);
-  if (!isVip) addCredits(req.user.id, -cost, 'Film: tạo chân dung nhân vật', job.id);
+  if (!isVip) {
+    const dailyErr = checkDailyVideoLimit(req.user.id);
+    if (dailyErr) return res.status(429).json({ error: dailyErr });
+  }
+  // Không còn hệ điểm: job ghi cost = 0.
+  const job = createJob(req.user.id, 'image', prompt, params, 0);
   try {
     const out = await muse.createImageTask({ prompt, model: 'muse-image', size: params.size, account_id: pick.upstreamId });
     const upstreamId = out?.id || out?.task_id;
@@ -656,11 +652,6 @@ r.post('/films/:id/characters/:charId/portrait', requireAuth, async (req, res) =
     res.json({ character: getFilmCharacter(p.id, ch.id) });
   } catch (e) {
     updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-    // VIP không trừ điểm nên không có gì để hoàn.
-    if (!isVip) {
-      addCredits(req.user.id, cost, 'Film: hoàn điểm khi tạo chân dung thất bại', job.id);
-      updateJob(job.id, { refunded: 1 });
-    }
     res.status(502).json({ error: `Tạo chân dung thất bại: ${e.message}` });
   }
 });
@@ -817,7 +808,7 @@ r.post('/films/:id/scenes/:sceneId/image', requireAuth, async (req, res) => {
     res.json({ scene: shapeScene(db.prepare('SELECT * FROM film_scenes WHERE id = ?').get(s.id)) });
   } catch (e) {
     failScene(s.id, e.message);
-    res.status(502).json({ error: e.message });
+    res.status(e.status || 502).json({ error: e.message });
   }
 });
 
@@ -831,7 +822,7 @@ r.post('/films/:id/scenes/:sceneId/video', requireAuth, async (req, res) => {
     res.json({ scene: shapeScene(db.prepare('SELECT * FROM film_scenes WHERE id = ?').get(s.id)) });
   } catch (e) {
     failScene(s.id, e.message);
-    res.status(502).json({ error: e.message });
+    res.status(e.status || 502).json({ error: e.message });
   }
 });
 

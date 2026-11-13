@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { requireAuth, requireAdmin, publicUser, createUser, hashPassword } from '../auth.js';
-import { db, addCredits, getSettings, setSetting, upsertAccount, auditLog, grantVip, revokeVip } from '../db.js';
+import { db, getSettings, setSetting, upsertAccount, auditLog, grantVip, revokeVip } from '../db.js';
 import { mediaStats, mediaStatsForUser, cleanupMedia } from '../mediaCleanup.js';
 import { MEDIA_DIR } from '../config.js';
 import * as muse from '../muse.js';
@@ -15,7 +15,7 @@ r.use(requireAuth, requireAdmin);
 /* ------------------------- helper: hạn mức + thống kê user ------------------------- */
 function userLimits(u) {
   return {
-    daily_credit_cap: u.daily_credit_cap ?? null,
+    daily_video_limit: u.daily_video_limit ?? null,
     max_concurrent_jobs: u.max_concurrent_jobs ?? null,
     media_max_mb: u.media_max_mb ?? null,
   };
@@ -26,11 +26,10 @@ function userStats(u, media) {
   const videos = db.prepare("SELECT COUNT(*) n FROM jobs WHERE user_id = ? AND type = 'video' AND status = 'completed'").get(id).n;
   const images = db.prepare("SELECT COUNT(*) n FROM jobs WHERE user_id = ? AND type = 'image' AND status = 'completed'").get(id).n;
   const jobs = db.prepare('SELECT COUNT(*) n FROM jobs WHERE user_id = ?').get(id).n;
-  const creditsSpent = db.prepare('SELECT COALESCE(-SUM(delta),0) n FROM ledger WHERE user_id = ? AND delta < 0').get(id).n;
   const accounts = db.prepare('SELECT COUNT(*) n FROM accounts WHERE owner_id = ?').get(id).n;
   const lastJob = db.prepare('SELECT MAX(created_at) m FROM jobs WHERE user_id = ?').get(id).m;
   return {
-    videos, images, jobs, creditsSpent,
+    videos, images, jobs,
     mediaMB: media?.totalMB ?? 0,
     mediaFiles: media?.files ?? 0,
     accounts,
@@ -49,12 +48,10 @@ r.get('/overview', (_req, res) => {  const users = db.prepare("SELECT COUNT(*) n
   const running = db.prepare("SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','processing')").get().n;
   const videos = db.prepare("SELECT COUNT(*) n FROM jobs WHERE status='completed' AND type='video'").get().n;
   const images = db.prepare("SELECT COUNT(*) n FROM jobs WHERE status='completed' AND type='image'").get().n;
-  const credits = db.prepare("SELECT COALESCE(SUM(credits),0) n FROM users").get().n;
-  const consumed = db.prepare("SELECT COALESCE(-SUM(delta),0) n FROM ledger WHERE delta < 0").get().n;
   const accounts = db.prepare('SELECT COUNT(*) n FROM accounts').get().n;
   const recent = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 8').all();
   res.json({
-    stats: { users, jobs, done, failed, running, videos, images, credits, consumed, accounts },
+    stats: { users, jobs, done, failed, running, videos, images, accounts },
     recent,
   });
 });
@@ -73,22 +70,19 @@ r.get('/users', (req, res) => {
   const rows = db.prepare(`SELECT * FROM users ${w} ORDER BY created_at DESC LIMIT 200`).all(...args);
   const mediaByUser = new Map(mediaStats().users.map((u) => [u.userId, u]));
   const users = rows.map((u) => publicUserFull(u, mediaByUser.get(u.id)));
-  const sortKey = { creditsSpent: 'creditsSpent', jobs: 'jobs', mediaMB: 'mediaMB', createdAt: 'createdAt' }[sort] || 'createdAt';
+  const sortKey = { jobs: 'jobs', mediaMB: 'mediaMB', createdAt: 'createdAt' }[sort] || 'createdAt';
   const getVal = (u) => (sortKey === 'createdAt' ? u.createdAt : u.stats[sortKey]) || 0;
   users.sort((a, b) => getVal(b) - getVal(a));
   res.json({ users });
 });
 
-/* Chi tiết một người dùng: hồ sơ + tác vụ + lịch sử điểm + tài khoản Muse + media + phim */
+/* Chi tiết một người dùng: hồ sơ + tác vụ + tài khoản Muse + media + phim */
 r.get('/users/:id', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Người dùng không tồn tại' });
   const media = mediaStatsForUser(user.id);
   const jobs = db.prepare(
     'SELECT id, type, prompt, status, cost, created_at, media_file FROM jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT 50'
-  ).all(user.id);
-  const ledger = db.prepare(
-    'SELECT id, delta, balance_after, reason, job_id, created_at FROM ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 50'
   ).all(user.id);
   const accounts = db.prepare(
     'SELECT id, label, status, upstream_id FROM accounts WHERE owner_id = ? ORDER BY created_at DESC'
@@ -100,7 +94,6 @@ r.get('/users/:id', (req, res) => {
     user: { ...publicUser(user), vipExpiresAt: user.vip_expires_at ?? null, limits: userLimits(user) },
     stats: userStats(user, media),
     jobs,
-    ledger,
     accounts,
     media: { totalMB: media.totalMB, files: media.files },
     films,
@@ -173,7 +166,7 @@ r.post('/users/:id/reset-password', (req, res) => {
 r.patch('/users/:id/limits', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Người dùng không tồn tại' });
-  const { daily_credit_cap, max_concurrent_jobs, media_max_mb } = req.body || {};
+  const { daily_video_limit, max_concurrent_jobs, media_max_mb } = req.body || {};
   const parse = (v, name) => {
     if (v === null || v === undefined) return null;
     const n = Number(v);
@@ -183,38 +176,19 @@ r.patch('/users/:id/limits', (req, res) => {
   let caps;
   try {
     caps = {
-      daily_credit_cap: parse(daily_credit_cap, 'Hạn mức điểm/ngày'),
+      daily_video_limit: parse(daily_video_limit, 'Hạn mức video/ngày'),
       max_concurrent_jobs: parse(max_concurrent_jobs, 'Số job chạy cùng lúc'),
       media_max_mb: parse(media_max_mb, 'Dung lượng media'),
     };
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
-  db.prepare('UPDATE users SET daily_credit_cap = ?, max_concurrent_jobs = ?, media_max_mb = ? WHERE id = ?')
-    .run(caps.daily_credit_cap, caps.max_concurrent_jobs, caps.media_max_mb, user.id);
+  db.prepare('UPDATE users SET daily_video_limit = ?, max_concurrent_jobs = ?, media_max_mb = ? WHERE id = ?')
+    .run(caps.daily_video_limit, caps.max_concurrent_jobs, caps.media_max_mb, user.id);
   const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
   auditLog(req.user.id, 'set_limits', 'user', user.id,
-    `Đặt hạn mức cho ${user.email}: điểm/ngày=${caps.daily_credit_cap ?? 'không giới hạn'}, job cùng lúc=${caps.max_concurrent_jobs ?? 'không giới hạn'}, media=${caps.media_max_mb ?? 'mặc định'} MB`);
+    `Đặt hạn mức cho ${user.email}: video/ngày=${caps.daily_video_limit ?? 'không giới hạn'}, job cùng lúc=${caps.max_concurrent_jobs ?? 'không giới hạn'}, media=${caps.media_max_mb ?? 'mặc định'} MB`);
   res.json({ user: { ...publicUser(updated), limits: userLimits(updated) } });
-});
-
-/* Lịch sử điểm toàn hệ thống */
-r.get('/ledger', (req, res) => {
-  const userId = String(req.query.user_id || '').trim();
-  const reason = String(req.query.reason || '').trim();
-  let limit = Number(req.query.limit || 100);
-  if (!Number.isFinite(limit) || limit <= 0) limit = 100;
-  limit = Math.min(limit, 500);
-  const where = [];
-  const args = [];
-  if (userId) { where.push('l.user_id = ?'); args.push(userId); }
-  if (reason) { where.push('l.reason LIKE ?'); args.push(`%${reason}%`); }
-  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const entries = db.prepare(
-    `SELECT l.id, l.user_id, u.email, l.delta, l.balance_after, l.reason, l.job_id, l.created_at
-     FROM ledger l LEFT JOIN users u ON u.id = l.user_id ${w} ORDER BY l.created_at DESC LIMIT ?`
-  ).all(...args, limit);
-  res.json({ entries });
 });
 
 /* Nhật ký quản trị */
@@ -326,15 +300,8 @@ r.post('/users', (req, res) => {
 r.patch('/users/:id', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Người dùng không tồn tại' });
-  const { credits, role, status, password } = req.body || {};
+  const { role, status, password } = req.body || {};
   const changes = [];
-  if (credits !== undefined && credits !== null) {
-    const delta = Number(credits);
-    if (delta !== 0) {
-      addCredits(user.id, delta, delta > 0 ? 'Quản trị viên nạp điểm' : 'Quản trị viên trừ điểm');
-      changes.push(`điểm ${delta > 0 ? '+' : ''}${delta}`);
-    }
-  }
   if (role && ['user', 'admin'].includes(role)) {
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, user.id);
     changes.push(`role → ${role}`);
@@ -388,7 +355,6 @@ r.get('/trend', (_req, res) => {
     days.push({
       date: new Date(from).toISOString().slice(5, 10),
       jobs: db.prepare('SELECT COUNT(*) n FROM jobs WHERE created_at >= ? AND created_at < ?').get(from, to).n,
-      credits: db.prepare("SELECT COALESCE(-SUM(delta),0) n FROM ledger WHERE delta < 0 AND created_at >= ? AND created_at < ?").get(from, to).n,
       recharge: db.prepare("SELECT COALESCE(SUM(amount),0) n FROM orders WHERE kind='recharge' AND status='paid' AND created_at >= ? AND created_at < ?").get(from, to).n,
     });
   }
@@ -410,7 +376,7 @@ r.post('/media-cleanup', (_req, res) => {
 });
 r.patch('/settings', (req, res) => {
   const allow = ['siteName', 'signupCredits', 'priceVideoBase', 'priceVideoPerSecond', 'priceImage', 'allowRegister', 'notice', 'mediaMaxMB', 'mediaRetentionDays', 'mediaGlobalMaxMB',
-    'vipPriceDayVnd', 'vipPriceWeekVnd', 'vipPriceMonthVnd', 'vipDailyVideoLimit', 'sepayMailApiUrl', 'sepayMailApiToken', 'sepayMbAccountNo', 'sepayMbAccountName', 'sepayMbBin', 'sepayCodePrefix', 'vipOrderTtlMin', 'vipPollSeconds'];
+    'vipPriceDayVnd', 'vipPriceWeekVnd', 'vipPriceMonthVnd', 'vipDailyVideoLimit', 'dailyVideoLimit', 'sepayMailApiUrl', 'sepayMailApiToken', 'sepayMbAccountNo', 'sepayMbAccountName', 'sepayMbBin', 'sepayCodePrefix', 'vipOrderTtlMin', 'vipPollSeconds'];
   const changed = [];
   for (const [k, v] of Object.entries(req.body || {})) {
     if (allow.includes(k)) { setSetting(k, v); changed.push(k); }
