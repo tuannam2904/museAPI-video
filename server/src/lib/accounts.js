@@ -48,7 +48,7 @@ function isAdminUser(userId) {
 }
 
 /** true nếu user được dùng acc VIP: còn quyền VIP, hoặc là admin. */
-function canUseVip(userId) {
+export function canUseVip(userId) {
   return isVipUser(userId) || isAdminUser(userId);
 }
 
