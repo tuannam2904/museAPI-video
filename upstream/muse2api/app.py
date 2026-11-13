@@ -484,6 +484,7 @@ class ImageRequest(BaseModel):
     audios: list | None = None
     files: list | None = None
     reference_image: str | None = None
+    account_id: str | None = None  # Chỉ định dùng tài khoản upstream nào; để trống thì luân chuyển
     async_: bool = Field(False, alias="async")
 
 
@@ -503,6 +504,7 @@ class VideoRequest(BaseModel):
     files: list | None = None
     image_url: Any = None
     reference_image: str | None = None
+    account_id: str | None = None  # Chỉ định dùng tài khoản upstream nào; để trống thì luân chuyển
 
 
 class ChatMessage(BaseModel):
@@ -1253,7 +1255,7 @@ def _prepare_reference_images(images: list[str]) -> list[str]:
 
 
 def _queue_image(req: ImageRequest, prompt: str, reference_images: list[str],
-                 idempotency_key: str | None = None):
+                 idempotency_key: str | None = None, account_id: str | None = None):
     """Opt-in polling avoids reverse-proxy timeouts; no generation is repeated by polling."""
     if idempotency_key and len(idempotency_key) > 256:
         raise HTTPException(400, "Idempotency-Key too long")
@@ -1291,7 +1293,7 @@ def _queue_image(req: ImageRequest, prompt: str, reference_images: list[str],
         try:
             res, acc_id = _run_generation(
                 prompt, "image", req.timeout or CFG.image_timeout,
-                reference_images=reference_images,
+                account_id=account_id, reference_images=reference_images,
                 on_progress=lambda p: store.update_task(tid, progress=p),
                 on_acquired=_on_acquired)
             # Store only media metadata, not large base64 payloads or reference credentials.
@@ -1314,7 +1316,7 @@ def _queue_image(req: ImageRequest, prompt: str, reference_images: list[str],
 def create_image_task(req: ImageRequest,
                       idempotency_key: str | None = Header(default=None), _=Depends(auth)):
     refs = _prepare_reference_images(_image_references(req))
-    return _queue_image(req, build_image_prompt(req, _reference_kinds(refs)), refs, idempotency_key)
+    return _queue_image(req, build_image_prompt(req, _reference_kinds(refs)), refs, idempotency_key, account_id=req.account_id)
 
 
 @app.get("/v1/images/tasks/{task_id}")
@@ -1338,10 +1340,11 @@ async def images_generations(req: ImageRequest, _=Depends(auth)):
     prompt = build_image_prompt(req, _reference_kinds(ref_images))
     timeout = req.timeout or CFG.image_timeout
     if req.async_:
-        return _queue_image(req, prompt, ref_images)
+        return _queue_image(req, prompt, ref_images, account_id=req.account_id)
     try:
         res, _acc = await asyncio.to_thread(
-            _run_generation, prompt, "image", timeout, reference_images=ref_images)
+            _run_generation, prompt, "image", timeout, account_id=req.account_id,
+            reference_images=ref_images)
     except MuseAuthError as exc:
         raise HTTPException(401, str(exc)) from exc
     except MuseGenerationError as exc:
@@ -1471,7 +1474,8 @@ async def create_video(req: VideoRequest, _=Depends(auth)):
         try:
             def prog_cb(p):
                 store.update_task(task["id"], progress=p)
-            res, acc_id = _run_generation(prompt, "video", timeout, on_progress=prog_cb,
+            res, acc_id = _run_generation(prompt, "video", timeout, account_id=req.account_id,
+                                          on_progress=prog_cb,
                                           reference_images=ref_images, on_acquired=_on_acquired)
             vurl = media_url(res["filename"])
             store.update_task(task["id"], status="completed", progress=100, account=acc_id,
