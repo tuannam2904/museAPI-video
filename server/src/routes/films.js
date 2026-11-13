@@ -118,8 +118,9 @@ function syncSceneFromJob(scene) {
   return scene;
 }
 
-async function chatText(system, user, timeoutMs = 600_000) {
+async function chatText(system, user, userId = null, timeoutMs = 600_000) {
   return chatWithPromptWriter({
+    userId,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -658,7 +659,7 @@ r.post('/films/:id/script', requireAuth, async (req, res) => {
       'Hãy viết kịch bản hoàn chỉnh gồm: (1) Tóm tắt câu chuyện 2-3 câu; (2) Nhân vật chính (tên, tuổi, ngoại hình, trang phục — giữ cố định xuyên suốt phim); (3) Bối cảnh và thời gian; (4) Diễn biến theo 3 hồi: mở đầu, cao trào, kết thúc; (5) Lời thoại ngắn nếu có (phim này ưu tiên không thoại dài, chủ yếu hành động và biểu cảm).',
       'Giữ ngoại hình nhân vật và trang phục nhất quán để dùng cho mọi cảnh quay.',
     ].join('\n');
-    const script = (await chatText(system, user)).trim();
+    const script = (await chatText(system, user, p.userId)).trim();
     if (!script) throw new Error('Muse trả về kịch bản rỗng');
     db.prepare("UPDATE film_projects SET script = ?, status = 'script', updated_at = ? WHERE id = ?")
       .run(script, now(), p.id);
@@ -694,10 +695,10 @@ r.post('/films/:id/storyboard', requireAuth, async (req, res) => {
     ].join('\n');
     let arr;
     try {
-      arr = extractScenes(await chatText(system, user));
+      arr = extractScenes(await chatText(system, user, p.userId));
     } catch {
       // Muse thỉnh thoảng trả JSON lỗi — hỏi lại một lần rồi mới báo lỗi
-      arr = extractScenes(await chatText(system, user));
+      arr = extractScenes(await chatText(system, user, p.userId));
     }
     if (!Array.isArray(arr) || !arr.length) throw new Error('Muse trả về danh sách cảnh rỗng');
     const ts = now();

@@ -21,7 +21,7 @@ r.post('/chat', requireAuth, async (req, res) => {
     .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
   try {
-    const content = await chatWithPromptWriter({ messages: clean, model });
+    const content = await chatWithPromptWriter({ userId: req.user.id, messages: clean, model });
     res.json({ content, model, usage: null });
   } catch (e) {
     res.status(502).json({ error: `Yêu cầu gặp lỗi：${e.message}` });

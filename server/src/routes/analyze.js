@@ -50,6 +50,7 @@ r.post('/analyze-image', requireAuth, async (req, res) => {
 
   try {
     const text = await chatWithPromptWriter({
+      userId: req.user.id,
       messages,
       images: refs,
       timeoutMs: 5 * 60 * 1000,
