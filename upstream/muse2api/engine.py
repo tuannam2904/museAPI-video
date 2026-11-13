@@ -349,7 +349,39 @@ class MuseEngine:
     def start(self):
         with self._start_lock:
             if self.proc and self.proc.poll() is None and self.browser:
-                return
+                # Kiem tra ket noi CDP con song that khong: chi kiem tra
+                # proc con chay + self.browser khac None la chua du - socket
+                # WebSocket co the da chet tu lau (Chrome khong crash nhung
+                # ket noi DevTools da dut), khien _open_page that bai voi loi
+                # "khong the tao phien trinh duyet doc lap" du process van song.
+                try:
+                    self.browser.send("Browser.getVersion", timeout=5)
+                    return
+                except Exception:
+                    # Ket noi da chet: bo no, thu noi lai vao Chrome dang
+                    # chay (qua cong debug); khong duoc thi diet proc cu de
+                    # phan duoi khoi dong Chrome moi.
+                    try:
+                        self.browser.close()
+                    except Exception:
+                        pass
+                    self.browser = None
+                    try:
+                        v = http_json(self._debug_url(), timeout=2)
+                        if v and "webSocketDebuggerUrl" in v:
+                            self.browser = CDP(v["webSocketDebuggerUrl"], timeout=180)
+                            return
+                    except Exception:
+                        pass
+                    try:
+                        self.proc.terminate()
+                        self.proc.wait(timeout=5)
+                    except Exception:
+                        try:
+                            self.proc.kill()
+                        except Exception:
+                            pass
+                    self.proc = None
             env = dict(os.environ)
             env.setdefault("HOME", self.cfg.home_dir)
             env["PATH"] = (self.cfg.extra_path + os.pathsep + env.get("PATH", "")) if self.cfg.extra_path else env.get("PATH", "")
