@@ -562,8 +562,10 @@ export function upsertAccount({ upstreamId, label, ownerId, status, expiresAt, q
 }
 
 export function listAccounts(ownerId) {
+  // User thường CHỈ thấy tài khoản của chính mình — acc do admin thêm
+  // (kho chung / acc VIP) không hiện với họ. Admin (ownerId null) thấy tất cả.
   if (ownerId) {
-    return db.prepare('SELECT * FROM accounts WHERE owner_id = ? OR owner_id IS NULL ORDER BY created_at DESC').all(ownerId);
+    return db.prepare('SELECT * FROM accounts WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
   }
   return db.prepare('SELECT * FROM accounts ORDER BY created_at DESC').all();
 }
