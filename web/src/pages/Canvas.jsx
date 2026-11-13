@@ -6,7 +6,7 @@ import {
   Group, Ungroup,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { api } from '../lib/api.js';
+import { api, getToken } from '../lib/api.js';
 import { getCanvasTheme } from '../lib/canvas-theme.js';
 import {
   nodeBounds, getConnectionTargetAnchor, getConnectionSourceAnchor,
@@ -65,6 +65,18 @@ const defaultDoc = () => ({
   links: [],
 });
 
+// Di trú tài liệu canvas (dùng chung cho bản localStorage và bản server):
+// tài liệu cũ chưa có title thì mặc định "Canvas vô hạn", nút cũ chưa có
+// width/height thì thêm mặc định, KHÔNG xóa hay di chuyển nút/link nào.
+const migrateDoc = (parsed) => {
+  const nodes = ((parsed && parsed.nodes) || []).map((n) => ({
+    ...n,
+    width: n.width ?? NODE_W,
+    height: n.height ?? nodeHGuess(n),
+  }));
+  return { title: 'Canvas vô hạn', links: [], ...parsed, nodes };
+};
+
 export default function Canvas() {
   const { refresh } = useAuth();
   const toast = useToast();
@@ -73,18 +85,7 @@ export default function Canvas() {
   const [doc, setDoc] = useState(() => {
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Tài liệu cũ chưa có title: mặc định "Canvas vô hạn"
-        // Di trú Phase 4: nút cũ chưa có width/height thì thêm mặc định,
-        // KHÔNG xóa hay di chuyển nút/link nào.
-        const nodes = (parsed.nodes || []).map((n) => ({
-          ...n,
-          width: n.width ?? NODE_W,
-          height: n.height ?? nodeHGuess(n),
-        }));
-        return { title: 'Canvas vô hạn', links: [], ...parsed, nodes };
-      }
+      if (raw) return migrateDoc(JSON.parse(raw));
     } catch { /* ignore */ }
     return defaultDoc();
   });
@@ -93,7 +94,10 @@ export default function Canvas() {
   const [view, setView] = useState({ x: 0, y: 0, z: 1 });
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(true);
+  const [saveState, setSaveState] = useState('saved'); // 'saved' | 'saving' | 'error'
+  const saveStateRef = useRef('saved');
+  saveStateRef.current = saveState;
+  const serverLoadedRef = useRef(false); // server đã đọc xong chưa (chưa thì không PUT)
   const [inspectorId, setInspectorId] = useState(null); // id nút đang mở bảng cấu hình
   const inspectorIdRef = useRef(null);
   inspectorIdRef.current = inspectorId;
@@ -188,14 +192,99 @@ export default function Canvas() {
   }, [doc.nodes]);
 
   /* ---------------- 持久化 ---------------- */
+  // Lưu localStorage ngay (debounce 400ms) + đồng bộ lên server khi đã đọc xong.
+  // Server là nguồn lưu chính để đổi trình duyệt/máy khác vẫn thấy canvas.
   useEffect(() => {
-    setSaved(false);
-    const t = setTimeout(() => {
-      localStorage.setItem(STORE_KEY, JSON.stringify(doc));
-      setSaved(true);
+    setSaveState('saving');
+    const t = setTimeout(async () => {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(doc)); } catch { /* ignore */ }
+      if (!serverLoadedRef.current) return; // chưa đọc xong server: lần lưu sau sẽ đẩy lên
+      try {
+        await api.saveCanvas(doc);
+        setSaveState('saved');
+      } catch {
+        setSaveState('error'); // localStorage đã lưu nên không mất dữ liệu; lần sửa sau thử lại
+      }
     }, 400);
     return () => clearTimeout(t);
   }, [doc]);
+
+  // Đọc canvas từ server khi mở trang (chạy 1 lần). Bản server thắng nếu người
+  // dùng chưa sửa gì sau khi mở; nếu đã sửa thì giữ bản local (bản local thắng)
+  // và đẩy nó lên server. Server chưa có doc mà local có nội dung thì di trú
+  // canvas local-only lên server. Lỗi mạng/server thì giữ local, báo 'error'.
+  useEffect(() => {
+    const snapshot = docRef.current;
+    const snapshotStr = JSON.stringify(snapshot);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getCanvas();
+        if (cancelled) return;
+        const serverDoc = res?.doc;
+        if (serverDoc) {
+          if (JSON.stringify(docRef.current) === snapshotStr) {
+            const migrated = migrateDoc(serverDoc);
+            setDoc(migrated);
+            try { localStorage.setItem(STORE_KEY, JSON.stringify(migrated)); } catch { /* ignore */ }
+            // setDoc kích hoạt save effect → PUT lại bản server (idempotent) → 'saved'
+          } else {
+            // Người dùng đã sửa sau khi mở: giữ bản local, đẩy lên server ngay
+            serverLoadedRef.current = true;
+            setSaveState('saving');
+            try {
+              await api.saveCanvas(docRef.current);
+              if (!cancelled) setSaveState('saved');
+            } catch {
+              if (!cancelled) setSaveState('error');
+            }
+          }
+        } else {
+          const local = docRef.current;
+          const nonEmpty = (local.nodes?.length || 0) > 0 || (local.title && local.title !== 'Canvas vô hạn');
+          serverLoadedRef.current = true;
+          if (nonEmpty) {
+            setSaveState('saving');
+            try {
+              await api.saveCanvas(local);
+              if (!cancelled) setSaveState('saved');
+            } catch {
+              if (!cancelled) setSaveState('error');
+            }
+          } else {
+            setSaveState('saved'); // cả 2 bên đều trống: không có gì để đồng bộ
+          }
+        }
+      } catch {
+        if (!cancelled) setSaveState('error'); // lỗi tải: giữ bản local, không toast
+      } finally {
+        if (!cancelled) serverLoadedRef.current = true;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Đẩy lần cuối khi ẩn trang / đóng trang (best-effort, không chờ).
+  useEffect(() => {
+    const flush = () => {
+      if (saveStateRef.current === 'saved') return;
+      const token = getToken();
+      if (!token) return;
+      fetch('/api/canvas', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ doc: docRef.current }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    const onVis = () => { if (document.hidden) flush(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('beforeunload', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('beforeunload', flush);
+    };
+  }, []);
 
   // Chế độ lưới nền lưu riêng (khóa nhỏ, không nằm trong doc)
   useEffect(() => {
@@ -1436,8 +1525,8 @@ export default function Canvas() {
               className="h-9 min-w-0 max-w-[200px] rounded-lg bg-transparent px-2 text-[15px] font-semibold text-white outline-none placeholder:text-mist-400 hover:bg-white/5 focus:bg-white/5 sm:max-w-[320px]"
             />
             <span className="hidden shrink-0 items-center gap-1.5 text-[11.5px] text-mist-400 sm:flex">
-              <span className={clsx('h-1.5 w-1.5 rounded-full', saved ? 'bg-brand-400' : 'bg-mist-400')} />
-              {saved ? 'Đã tự động lưu' : 'Đang lưu…'}
+              <span className={clsx('h-1.5 w-1.5 rounded-full', saveState === 'saved' ? 'bg-brand-400' : saveState === 'error' ? 'bg-amber-400' : 'bg-mist-400')} />
+              {saveState === 'saved' ? 'Đã tự động lưu' : saveState === 'error' ? 'Chưa đồng bộ được — sẽ thử lại' : 'Đang lưu…'}
             </span>
           </div>
           <div className="pointer-events-auto flex shrink-0 items-center gap-1">
