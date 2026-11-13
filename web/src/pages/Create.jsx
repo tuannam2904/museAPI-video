@@ -9,6 +9,7 @@ import { api, fmtAgo } from '../lib/api.js';
 import { fmtCountdown, jobDeleteAt, useNow } from '../lib/mediaPolicy.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast, Modal } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 import QueueDrawer from '../components/QueueDrawer.jsx';
 import ParamsPanel, { buildExtra, PARAM_DEFAULTS } from '../components/ParamsPanel.jsx';
 
@@ -27,6 +28,7 @@ const IMAGE_COST = 5;
 export default function Create() {
   const { user, refresh } = useAuth();
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const nav = useNavigate();
 
   const [projects, setProjects] = useState(() => {
@@ -79,9 +81,9 @@ export default function Create() {
     toast('Đã tạo dự án', 'ok');
   };
 
-  const removeProject = (e, id) => {
+  const removeProject = async (e, id) => {
     e.stopPropagation();
-    if (!window.confirm('Xác nhận xóa dự án này?')) return;
+    if (!(await confirmDialog('Xác nhận xóa dự án này?', { dontAskKey: 'create-delete-project' }))) return;
     setProjects((list) => list.filter((p) => p.id !== id));
     if (active === id) setActive(null);
   };
@@ -210,7 +212,7 @@ export default function Create() {
   const clearFailed = async () => {
     const failed = jobs.filter((j) => j.status === 'failed');
     if (!failed.length) return toast('Không có tác vụ thất bại', 'error');
-    if (!confirm(`Xóa ${failed.length} tác vụ thất bại?`)) return;
+    if (!(await confirmDialog(`Xóa ${failed.length} tác vụ thất bại?`, { dontAskKey: 'create-clear-failed' }))) return;
     try {
       await Promise.all(failed.map((j) => api.deleteJob(j.id)));
       setJobs((l) => l.filter((j) => j.status !== 'failed'));
@@ -575,7 +577,7 @@ export default function Create() {
               )}
               <button
                 onClick={async () => {
-                  if (!confirm('Xóa tác phẩm này? Tệp sẽ bị xóa cùng.')) return;
+                  if (!(await confirmDialog('Xóa tác phẩm này? Tệp sẽ bị xóa cùng.', { dontAskKey: 'create-delete-work' }))) return;
                   try {
                     await api.deleteJob(preview.id);
                     setJobs((l) => l.filter((x) => x.id !== preview.id));

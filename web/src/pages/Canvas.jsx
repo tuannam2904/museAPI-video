@@ -14,6 +14,7 @@ import {
 } from '../lib/canvas-geometry.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast, Modal } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 import NodeInspector from '../components/NodeInspector.jsx';
 import CanvasMinimap from '../components/canvas/CanvasMinimap.jsx';
 import CanvasSidePanel from '../components/canvas/CanvasSidePanel.jsx';
@@ -69,6 +70,7 @@ const defaultDoc = () => ({
 export default function Canvas() {
   const { user, refresh } = useAuth();
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
 
   const [doc, setDoc] = useState(() => {
     try {
@@ -761,9 +763,9 @@ export default function Canvas() {
   };
 
   // Xóa toàn bộ canvas (hỏi trước; vẫn hoàn tác được bằng Ctrl+Z)
-  const clearCanvas = () => {
+  const clearCanvas = async () => {
     if (!doc.nodes.length) return;
-    if (!window.confirm('Xóa hết tất cả nút trên canvas?')) return;
+    if (!(await confirmDialog('Xóa hết tất cả nút trên canvas?', { dontAskKey: 'canvas-clear' }))) return;
     setDoc((d) => ({ ...d, nodes: [], links: [] }));
     setSelected([]);
     setInspectorId(null);

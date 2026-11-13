@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { api, fmtAgo, fmtBytes } from '../lib/api.js';
 import { fmtCountdown, jobDeleteAt, useNow } from '../lib/mediaPolicy.js';
 import { Badge, Button, Empty, Modal, useToast, Spinner } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const FILTERS = [
   ['', 'Tất cả', Film],
@@ -15,6 +16,7 @@ const VIEW_KEY = 'works_view';
 
 export default function Works() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [type, setType] = useState('');
   const [jobs, setJobs] = useState([]);
   const [total, setTotal] = useState(0);
@@ -47,7 +49,7 @@ export default function Works() {
   useEffect(() => { api.mediaStats().then(setMedia).catch(() => {}); }, []);
 
   const remove = async (job) => {
-    if (!confirm('Xóa tác phẩm này? Tệp sẽ bị xóa cùng.')) return;
+    if (!(await confirmDialog('Xóa tác phẩm này? Tệp sẽ bị xóa cùng.', { dontAskKey: 'works-delete' }))) return;
     try {
       await api.deleteJob(job.id);
       setJobs((l) => l.filter((j) => j.id !== job.id));

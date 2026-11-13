@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Code2, KeyRound, Plus, Copy, Trash2, Loader2, CheckCircle2, Terminal, BookOpen } from 'lucide-react';
 import { api, fmtAgo } from '../lib/api.js';
 import { useToast } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const SNIPPETS = [
   {
@@ -42,6 +43,7 @@ print(resp.choices[0].message.content)`,
 
 export default function ApiPlatform() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [keys, setKeys] = useState([]);
   const [baseUrl, setBaseUrl] = useState('');
   const [loading, setLoading] = useState(true);
@@ -79,7 +81,7 @@ export default function ApiPlatform() {
   };
 
   const remove = async (k) => {
-    if (!confirm(`Xóa khóa "${k.name}"? Các lệnh gọi sẽ hết hiệu lực ngay.`)) return;
+    if (!(await confirmDialog(`Xóa khóa "${k.name}"? Các lệnh gọi sẽ hết hiệu lực ngay.`, { dontAskKey: 'apikey-delete' }))) return;
     try {
       await api.deleteKey(k.id);
       setKeys((l) => l.filter((x) => x.id !== k.id));

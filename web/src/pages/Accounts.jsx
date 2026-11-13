@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
 import { useAuth } from '../store/auth.jsx';
 import { Badge, Button, Drawer, Empty, Field, Input, Modal, Textarea, useToast } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const STATUS = {
   ok: { tone: 'ok', label: 'Khả dụng' },
@@ -30,6 +31,7 @@ function buildProxy(server, user, pass) {
 
 export default function Accounts() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const { user } = useAuth();
   // Chỉ quản trị viên mới thấy / chạm được phần viết prompt chung — dùng cùng
   // cách kiểm tra admin như AdminGuard (App.jsx) và Layout.jsx
@@ -108,7 +110,7 @@ export default function Accounts() {
   };
 
   const remove = async (acc) => {
-    if (!confirm(`Xóa tài khoản «${acc.label}»?`)) return;
+    if (!(await confirmDialog(`Xóa tài khoản «${acc.label}»?`, { dontAskKey: 'accounts-delete' }))) return;
     setBusyId(acc.id);
     try {
       await api.deleteAccount(acc.id);

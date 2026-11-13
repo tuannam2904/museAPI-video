@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { api, fmtTime } from '../lib/api.js';
 import { fmtCountdown, useNow } from '../lib/mediaPolicy.js';
 import { Badge, Button, Empty, Spinner, useToast } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const PLAN_LABEL = { day: 'Ngày', week: 'Tuần', month: 'Tháng' };
 const PLAN_DAYS = { day: 1, week: 7, month: 30 };
@@ -19,6 +20,7 @@ const fmtVnd = (n) => (n == null || n === '' ? '—' : `${Number(n).toLocaleStri
 
 export default function VipPage() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const now = useNow(1000);
   const [status, setStatus] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -104,7 +106,7 @@ export default function VipPage() {
   const cancel = async () => {
     const order = activeOrder?.order;
     if (!order) return;
-    if (!confirm(`Hủy đơn VIP ${order.code}?`)) return;
+    if (!(await confirmDialog(`Hủy đơn VIP ${order.code}?`, { dontAskKey: 'vip-cancel-order' }))) return;
     setCanceling(true);
     try {
       await api.cancelVipOrder(order.id);

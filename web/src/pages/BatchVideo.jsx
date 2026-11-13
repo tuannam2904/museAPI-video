@@ -10,6 +10,7 @@ import { api, fmtTime, fmtAgo } from '../lib/api.js';
 import { fmtCountdown, useNow } from '../lib/mediaPolicy.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 import PromptLibrary from '../components/PromptLibrary.jsx';
 
 /* Tạo video hàng loạt (kiểu Meosu): dán nhiều prompt, mỗi dòng là một video.
@@ -51,6 +52,7 @@ const loadCharacters = () => {
 export default function BatchVideo() {
   const { user, refresh } = useAuth();
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const nav = useNavigate();
   const now = useNow(1000);
 
@@ -406,8 +408,8 @@ export default function BatchVideo() {
     toast('Đã lưu nhân vật', 'ok');
   };
 
-  const deleteCharacter = (c) => {
-    if (!confirm(`Xóa nhân vật "${c.name}"?`)) return;
+  const deleteCharacter = async (c) => {
+    if (!(await confirmDialog(`Xóa nhân vật "${c.name}"?`, { dontAskKey: 'batch-delete-character' }))) return;
     setCharacters((list) => list.filter((x) => x.id !== c.id));
     if (keepCharId === c.id) {
       setKeepCharId(null);
@@ -1066,8 +1068,8 @@ export default function BatchVideo() {
                     <RefreshCw size={14} /> Tạo lại
                   </button>
                   <button
-                    onClick={() => {
-                      if (!confirm('Xóa tác vụ này? Video trên máy chủ (nếu có) sẽ bị xóa cùng.')) return;
+                    onClick={async () => {
+                      if (!(await confirmDialog('Xóa tác vụ này? Video trên máy chủ (nếu có) sẽ bị xóa cùng.', { dontAskKey: 'batch-task-delete' }))) return;
                       deleteTask(selected);
                     }}
                     className="flex h-10 items-center gap-1.5 rounded-xl border border-rose-500/30 px-3.5 text-[13px] text-rose-300 transition hover:bg-rose-500/10"

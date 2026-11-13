@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { api, fmtAgo, fmtTime } from '../lib/api.js';
 import { useAuth } from '../store/auth.jsx';
 import { Badge, Button, Drawer, Field, Input, Select, useToast, Spinner, Empty } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const TABS = [
   ['overview', 'Tổng quan', Cpu],
@@ -480,6 +481,7 @@ function UsersPanel() {
 /* ------------------------------- Chi tiết người dùng ------------------------------- */
 function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dtab, setDtab] = useState('jobs');
@@ -562,7 +564,7 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
 
   const remove = async () => {
     const u = detail?.user;
-    if (!confirm(`Xóa user «${u?.email}»? Toàn bộ tác vụ, lịch sử điểm, tài khoản Muse, phim và media của user này sẽ bị xóa.`)) return;
+    if (!(await confirmDialog(`Xóa user «${u?.email}»? Toàn bộ tác vụ, lịch sử điểm, tài khoản Muse, phim và media của user này sẽ bị xóa.`, { dontAskKey: 'admin-delete-user' }))) return;
     setDeleting(true);
     try {
       await api.adminDeleteUser(userId);
@@ -593,7 +595,7 @@ function UserDetailDrawer({ userId, me, onClose, onDeleted, onChanged }) {
 
   const revokeVip = async () => {
     const du = detail?.user;
-    if (!confirm(`Hủy VIP của «${du?.email}»? User sẽ không dùng được tài khoản Muse VIP nữa.`)) return;
+    if (!(await confirmDialog(`Hủy VIP của «${du?.email}»? User sẽ không dùng được tài khoản Muse VIP nữa.`, { dontAskKey: 'admin-revoke-vip' }))) return;
     setVipBusy(true);
     try {
       await api.adminRevokeVip(userId);
@@ -1078,6 +1080,7 @@ function OrdersPanel() {
 /* ------------------------------- VIP ------------------------------- */
 function VipPanel() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [settings, setSettings] = useState(null);
   const [saving, setSaving] = useState(false);
   const [accounts, setAccounts] = useState([]);
@@ -1134,7 +1137,7 @@ function VipPanel() {
   };
 
   const confirmOrder = async (o) => {
-    if (!confirm(`Xác nhận đã nhận ${Number(o.amount_vnd || 0).toLocaleString('vi-VN')}đ cho đơn ${o.code} và kích hoạt VIP cho user này?`)) return;
+    if (!(await confirmDialog(`Xác nhận đã nhận ${Number(o.amount_vnd || 0).toLocaleString('vi-VN')}đ cho đơn ${o.code} và kích hoạt VIP cho user này?`, { confirmLabel: 'Xác nhận' }))) return;
     setConfirming(o.id);
     try {
       await api.adminConfirmVipOrder(o.id);
@@ -1327,6 +1330,7 @@ function VipPanel() {
 /* ------------------------------- Cộng đồng ------------------------------- */
 function PostsPanel() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1345,7 +1349,7 @@ function PostsPanel() {
   useEffect(() => { load(); }, [load]);
 
   const remove = async (p) => {
-    if (!confirm(`Xóa bài viết "${p.title}"?`)) return;
+    if (!(await confirmDialog(`Xóa bài viết "${p.title}"?`, { dontAskKey: 'admin-delete-post' }))) return;
     try {
       await api.adminDeletePost(p.id);
       setPosts((l) => l.filter((x) => x.id !== p.id));

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Users, Plus, Trash2, ImagePlus, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Button, Empty, Field, Input, Textarea, useToast } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const CHAR_STORE_KEY = 'xm_characters';
 
@@ -14,6 +15,7 @@ const loadCharacters = () => {
 
 export default function Characters() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [characters, setCharacters] = useState(loadCharacters);
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
@@ -67,8 +69,8 @@ export default function Characters() {
     toast('Đã lưu nhân vật', 'ok');
   };
 
-  const deleteCharacter = (c) => {
-    if (!window.confirm(`Xóa nhân vật "${c.name}"?`)) return;
+  const deleteCharacter = async (c) => {
+    if (!(await confirmDialog(`Xóa nhân vật "${c.name}"?`, { dontAskKey: 'characters-delete' }))) return;
     setCharacters((list) => list.filter((x) => x.id !== c.id));
     toast('Đã xóa nhân vật', 'ok');
   };

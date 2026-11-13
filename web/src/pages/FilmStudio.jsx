@@ -6,6 +6,7 @@ import {
 import { clsx } from 'clsx';
 import { api, fmtAgo } from '../lib/api.js';
 import { Badge, Button, Empty, Field, Input, Select, Spinner, Textarea, useToast } from '../components/ui.jsx';
+import { useConfirmDialog } from '../components/ConfirmDialog.jsx';
 
 const GENRES = ['đời thường', 'hành động', 'hài hước', 'tình cảm', 'kinh dị', 'viễn tưởng', 'tài liệu'];
 const STYLES = ['điện ảnh', 'chân thực', 'hoạt hình', 'tài liệu', 'hoài cổ'];
@@ -73,6 +74,7 @@ function StepCard({ n, title, desc, children }) {
 
 export default function FilmStudio() {
   const toast = useToast();
+  const confirmDialog = useConfirmDialog();
 
   /* ---------------- danh sách dự án ---------------- */
   const [projects, setProjects] = useState([]);
@@ -239,7 +241,7 @@ export default function FilmStudio() {
 
   const deleteProject = async (id, e) => {
     e?.stopPropagation();
-    if (!window.confirm('Xóa dự án phim này và toàn bộ cảnh của nó?')) return;
+    if (!(await confirmDialog('Xóa dự án phim này và toàn bộ cảnh của nó?', { dontAskKey: 'film-delete-project' }))) return;
     setDeleting(true);
     try {
       await api.deleteFilm(id);
@@ -366,7 +368,7 @@ export default function FilmStudio() {
   };
 
   const deleteCharacter = async (charId, name) => {
-    if (!window.confirm(`Xóa nhân vật "${name}"?`)) return;
+    if (!(await confirmDialog(`Xóa nhân vật "${name}"?`, { dontAskKey: 'film-delete-character' }))) return;
     try {
       await api.deleteFilmCharacter(project.id, charId);
       setCharacters((l) => l.filter((c) => c.id !== charId));
@@ -446,7 +448,7 @@ export default function FilmStudio() {
   };
 
   const deleteScene = async (sceneId) => {
-    if (!window.confirm('Xóa cảnh này?')) return;
+    if (!(await confirmDialog('Xóa cảnh này?', { dontAskKey: 'film-delete-scene' }))) return;
     setBusy(sceneId, 'delete');
     try {
       await api.deleteFilmScene(project.id, sceneId);
