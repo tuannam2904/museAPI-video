@@ -201,7 +201,7 @@ export default function NodeInspector({
             ))}
           </div>
           <span className="ml-auto font-mono text-[10.5px] text-mist-400">
-            {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : (isVideo && node.vip ? 'VIP · không tốn điểm' : '')}
+            {running ? `Đang tạo ${node.progress || 0}%` : failed ? 'Thất bại' : node.mediaUrl ? 'Đã tạo xong' : (node.vip ? 'VIP · không tốn điểm' : '')}
           </span>
         </div>
       )}
@@ -273,24 +273,22 @@ export default function NodeInspector({
         </div>
       )}
 
-      {/* Dùng acc VIP (chỉ nút video): bật thì lúc tạo sẽ dùng tài khoản Muse VIP của admin. */}
-      {isVideo && (
-        <label className={clsx(
-          'mt-2 flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-[12px] transition',
-          isVip ? 'border-amber-500/30 bg-amber-500/[0.06]' : 'border-white/[0.06] bg-[#0d111c] opacity-60'
-        )}>
-          <input
-            type="checkbox"
-            checked={!!node.vip}
-            disabled={!isVip}
-            onChange={(e) => onUpdate({ vip: e.target.checked })}
-            className="h-4 w-4 accent-amber-400"
-          />
-          <Crown size={13} className={isVip ? 'text-amber-300' : 'text-mist-400'} />
-          <span className="text-mist-200">Dùng acc VIP</span>
-          {!isVip && <span className="ml-auto text-[10.5px] text-mist-400">Cần có VIP</span>}
-        </label>
-      )}
+      {/* Dùng acc VIP: bật thì lúc tạo sẽ dùng tài khoản Muse VIP của admin. */}
+      <label className={clsx(
+        'mt-2 flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-[12px] transition',
+        isVip ? 'border-amber-500/30 bg-amber-500/[0.06]' : 'border-white/[0.06] bg-[#0d111c] opacity-60'
+      )}>
+        <input
+          type="checkbox"
+          checked={!!node.vip}
+          disabled={!isVip}
+          onChange={(e) => onUpdate({ vip: e.target.checked })}
+          className="h-4 w-4 accent-amber-400"
+        />
+        <Crown size={13} className={isVip ? 'text-amber-300' : 'text-mist-400'} />
+        <span className="text-mist-200">Dùng acc VIP</span>
+        {!isVip && <span className="ml-auto text-[10.5px] text-mist-400">Cần có VIP</span>}
+      </label>
 
       {/* Chân: tạo / tải lên / xóa */}
       <div className="mt-2.5 flex items-center gap-2">
