@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { CFG } from './config.js';
-import { db, uid, now, addCredits, getSetting } from './db.js';
+import { db, uid, now } from './db.js';
 
 export const hashPassword = (pw) => bcrypt.hashSync(pw, 10);
 export const verifyPassword = (pw, hash) => bcrypt.compareSync(pw, hash);
@@ -15,19 +15,16 @@ export function publicUser(u) {
     email: u.email,
     name: u.name || u.email.split('@')[0],
     role: u.role,
-    credits: u.credits,
     status: u.status,
     createdAt: u.created_at,
   };
 }
 
-export function createUser({ email, password, name, role = 'user', credits, invitedBy = null }) {
+export function createUser({ email, password, name, role = 'user', invitedBy = null }) {
   const id = uid('u_');
-  const gift = credits ?? Number(getSetting('signupCredits') || 0);
   db.prepare(
     'INSERT INTO users(id, email, password_hash, name, role, credits, status, created_at, invited_by) VALUES(?,?,?,?,?,?,?,?,?)'
   ).run(id, email.toLowerCase().trim(), hashPassword(password), name || null, role, 0, 'active', now(), invitedBy);
-  if (gift > 0) addCredits(id, gift, 'Tặng khi đăng ký');
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 }
 
@@ -43,7 +40,7 @@ export function findByInviteCode(code) {
 }
 
 export function invitedUsers(userId) {
-  return db.prepare('SELECT id, email, name, created_at, credits FROM users WHERE invited_by = ? ORDER BY created_at DESC')
+  return db.prepare('SELECT id, email, name, created_at FROM users WHERE invited_by = ? ORDER BY created_at DESC')
     .all(userId);
 }
 

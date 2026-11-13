@@ -250,7 +250,7 @@ try {
 } catch { /* 已存在 */ }
 
 // Hạn mức riêng từng user (để admin quản lý nhiều người dùng)
-for (const col of ['daily_credit_cap INTEGER', 'max_concurrent_jobs INTEGER', 'media_max_mb INTEGER']) {
+for (const col of ['daily_credit_cap INTEGER', 'max_concurrent_jobs INTEGER', 'media_max_mb INTEGER', 'daily_video_limit INTEGER']) {
   try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* đã có */ }
 }
 
@@ -318,6 +318,11 @@ const DEFAULT_SETTINGS = {
   // (tính từ 0h đến 24h giờ địa phương). Hết lượt thì acc đó nghỉ đến ngày mai;
   // user muốn tạo thêm thì tự thêm tài khoản Muse của mình. Đổi được trong Admin.
   vipDailyVideoLimit: '100',
+  // Giới hạn số video/ảnh MỖI user được tạo trong 1 ngày (tính từ 0h đến 24h giờ
+  // địa phương) khi tạo bằng tài khoản Muse của chính họ — đây là giới hạn duy nhất
+  // thay cho hệ điểm. Rỗng = không giới hạn. Hạn mức riêng từng user
+  // (users.daily_video_limit) ưu tiên hơn giá trị chung này. Đổi được trong Admin.
+  dailyVideoLimit: '100',
   // SePay (VietQR + chuyển khoản MB): Worker nhận webhook rồi cho platform poll.
   sepayMailApiUrl: '',
   sepayMailApiToken: '',
@@ -373,6 +378,31 @@ export function grantVip(userId, days) {
 
 export function revokeVip(userId) {
   db.prepare('UPDATE users SET vip_expires_at = NULL WHERE id = ?').run(userId);
+}
+
+/* ------------------------- giới hạn số video/ngày ------------------------- */
+/** Số video + ảnh user đã tạo từ 0h hôm nay (giờ địa phương của server).
+ * Đếm mọi job đã tạo, không lọc trạng thái: job đã tạo là đã chiếm 1 lượt,
+ * dù sau đó thành công hay thất bại. */
+export function userTodayVideoCount(userId) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const row = db.prepare(
+    'SELECT COUNT(*) n FROM jobs WHERE user_id = ? AND created_at >= ?'
+  ).get(userId, d.getTime());
+  return Number(row?.n) || 0;
+}
+
+/** Giới hạn số video/ảnh user được tạo trong 1 ngày: hạn mức riêng của user
+ * (users.daily_video_limit) ưu tiên; không có thì lấy giá trị chung
+ * (setting dailyVideoLimit); rỗng/không hợp lệ = không giới hạn (null). */
+export function getDailyVideoLimit(userId) {
+  const u = db.prepare('SELECT daily_video_limit FROM users WHERE id = ?').get(userId);
+  if (u && u.daily_video_limit != null) return u.daily_video_limit;
+  const raw = getSetting('dailyVideoLimit');
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
 }
 
 /* -------------------------------- ledger -------------------------------- */

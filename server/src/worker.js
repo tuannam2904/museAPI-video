@@ -1,5 +1,6 @@
-import { pendingJobs, updateJob, addCredits, getJob, db, createJob, priceOf } from './db.js';
+import { pendingJobs, updateJob, getJob, db, createJob } from './db.js';
 import { getVideo, getImageTask, downloadMedia, createVideo, MuseError } from './muse.js';
+import { checkDailyVideoLimit } from './routes/generate.js';
 
 const TICK_MS = 3000;
 const VIDEO_TIMEOUT_MS = 15 * 60 * 1000;   // 15 分钟
@@ -9,15 +10,6 @@ const inflight = new Set();
 
 function failJob(job, message) {
   updateJob(job.id, { status: 'failed', error: String(message).slice(0, 500), finished_at: Date.now() });
-  if (!job.refunded && job.cost > 0) {
-    try {
-      addCredits(job.userId, job.cost, 'Hoàn điểm khi tác vụ thất bại', job.id);
-      updateJob(job.id, { refunded: 1 });
-      job.refunded = true;
-    } catch (e) {
-      console.error('[worker] 退款失败', job.id, e.message);
-    }
-  }
 }
 
 function settleDone(job, payload) {
@@ -113,16 +105,16 @@ async function tickQueue() {
     let params = {};
     try { params = JSON.parse(q.params || '{}'); } catch { params = {}; }
 
-    const cost = priceOf('video', params);
-    const u = db.prepare('SELECT credits FROM users WHERE id = ?').get(q.user_id);
-    if (!u || u.credits < cost) {
+    // Hàng đợi không chọn acc VIP — mọi lượt đều là lượt thường nên chịu
+    // giới hạn số video/ngày của user, giống đường tạo trực tiếp (429).
+    const dailyErr = checkDailyVideoLimit(q.user_id);
+    if (dailyErr) {
       db.prepare("UPDATE queue_items SET status = 'paused', note = ? WHERE id = ?")
-        .run(`Không đủ điểm (cần ${cost}), tác vụ đã tạm dừng`, q.id);
+        .run(dailyErr, q.id);
       continue;
     }
 
-    const job = createJob(q.user_id, 'video', q.prompt, params, cost);
-    addCredits(q.user_id, -cost, 'Chạy tác vụ trong hàng đợi', job.id);
+    const job = createJob(q.user_id, 'video', q.prompt, params, 0);
 
     try {
       const payload = {
@@ -141,8 +133,6 @@ async function tickQueue() {
       console.log(`[queue] 执行 ${q.id} → job ${job.id}`);
     } catch (e) {
       updateJob(job.id, { status: 'failed', error: e.message, finished_at: Date.now() });
-      addCredits(q.user_id, cost, 'Hoàn điểm khi tác vụ hàng đợi thất bại', job.id);
-      updateJob(job.id, { refunded: 1 });
       db.prepare("UPDATE queue_items SET status = 'failed', note = ?, runs = runs + 1 WHERE id = ?")
         .run(String(e.message).slice(0, 200), q.id);
     }

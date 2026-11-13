@@ -10,7 +10,6 @@ import authRoutes from './routes/auth.js';
 import accountRoutes from './routes/accounts.js';
 import genRoutes from './routes/generate.js';
 import adminRoutes from './routes/admin.js';
-import billingRoutes from './routes/billing.js';
 import forumRoutes from './routes/forum.js';
 import apiKeyRoutes from './routes/apikeys.js';
 import v1Routes from './routes/v1.js';
@@ -61,7 +60,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', apiKeyRoutes);   // /api/keys
-app.use('/api', billingRoutes);
 app.use('/api', forumRoutes);
 app.use('/api', queueRoutes);
 app.use('/api', teamRoutes);
@@ -105,7 +103,7 @@ function bootstrap() {
   const password = process.env.ADMIN_PASSWORD || 'admin123456';
   const existing = findUserByEmail(email);
   if (!existing) {
-    createUser({ email, password, name: 'Quản trị viên', role: 'admin', credits: 10000 });
+    createUser({ email, password, name: 'Quản trị viên', role: 'admin' });
     console.log(`[server] 已创建管理员：${email} / ${password}`);
   }
   const n = db.prepare('SELECT COUNT(*) n FROM users').get().n;
