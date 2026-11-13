@@ -7,17 +7,18 @@ import ipaddress
 import select
 import socket
 import socketserver
+import ssl
 import threading
 from urllib.parse import quote, unquote, urlsplit
 
 
 def normalize_server(value: str) -> str:
-    """Accept HTTP or SOCKS5 proxy origins; credentials use separate fields."""
+    """Accept HTTP, HTTPS or SOCKS5 proxy origins; credentials use separate fields."""
     try:
         parsed = urlsplit(value.strip())
         port = parsed.port if parsed.port is not None else (1080 if parsed.scheme in ("socks5", "socks5h") else 80)
         host = parsed.hostname
-        if (parsed.scheme not in ("http", "socks5", "socks5h") or not host or parsed.username is not None
+        if (parsed.scheme not in ("http", "https", "socks5", "socks5h") or not host or parsed.username is not None
                 or parsed.password is not None or parsed.path not in ("", "/")
                 or parsed.query or parsed.fragment or not 1 <= port <= 65535
                 or any(c.isspace() or ord(c) < 32 for c in value)
@@ -26,7 +27,7 @@ def normalize_server(value: str) -> str:
         host = f"[{host}]" if ":" in host else host.encode("idna").decode("ascii")
         return f"{parsed.scheme}://{host}:{port}"
     except (ValueError, UnicodeError):
-        raise ValueError("Use http://host:port, socks5://host:port or socks5h://host:port") from None
+        raise ValueError("Use http://host:port, https://host:port, socks5://host:port or socks5h://host:port") from None
 
 
 def split_proxy_url(value: dict) -> dict:
@@ -43,7 +44,7 @@ def split_proxy_url(value: dict) -> dict:
                 "username": unquote(parsed.username or "", errors="strict"),
                 "password": unquote(parsed.password or "", errors="strict")}
     except (ValueError, UnicodeError):
-        raise ValueError("Invalid proxy URL; use http://user:password@host:port or socks5://user:password@host:port") from None
+        raise ValueError("Invalid proxy URL; use http://user:password@host:port, https://host:port or socks5://user:password@host:port") from None
 
 
 def public_proxy(proxy: dict | None) -> dict | None:
@@ -60,7 +61,10 @@ def request_proxies(proxy: dict | None) -> dict:
     auth = ""
     if proxy.get("username") or proxy.get("password"):
         auth = quote(proxy.get("username", ""), safe="") + ":" + quote(proxy.get("password", ""), safe="") + "@"
-    url = f"http://{auth}{parsed.netloc}"
+    # Keep the proxy own scheme: an HTTPS proxy (e.g. URnetwork) needs an
+    # https:// URL so requests/httpx does TLS to the proxy; forcing http://
+    # would speak plain HTTP to a TLS-only proxy and get an empty reply.
+    url = f"{parsed.scheme}://{auth}{parsed.netloc}"
     return {"proxies": {"http": url, "https": url}}
 
 
@@ -132,7 +136,12 @@ class _RelayHandler(socketserver.BaseRequestHandler):
                     upstream.sendall(b"\r\n".join([request_line, *headers]) + b"\r\n\r\n")
             else:
                 upstream = socket.create_connection(relay.address, timeout=15)
+                if relay.scheme == "https":
+                    # HTTPS proxy (e.g. URnetwork): TLS to the proxy first,
+                    # then the CONNECT goes inside that TLS tunnel.
+                    upstream = relay.wrap_tls(upstream)
                 if not relay.track(upstream):
+                    upstream.close()
                     return
                 if relay.authorization:
                     headers.append(b"Proxy-Authorization: " + relay.authorization)
@@ -194,6 +203,11 @@ class HTTPProxyRelay:
                 raise OSError("SOCKS5 proxy closed the connection")
             data.extend(chunk)
         return bytes(data)
+
+    def wrap_tls(self, sock):
+        """Wrap a plain socket in TLS to an HTTPS proxy (URnetwork)."""
+        ctx = ssl.create_default_context()
+        return ctx.wrap_socket(sock, server_hostname=self.address[0])
 
     def connect_socks(self, host, port):
         sock = socket.create_connection(self.address, timeout=15)
