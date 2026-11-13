@@ -20,6 +20,7 @@ import analyzeRoutes from './routes/analyze.js';
 import promptsRoutes from './routes/prompts.js';
 import filmsRoutes from './routes/films.js';
 import vipRoutes from './routes/vip.js';
+import canvasRoutes from './routes/canvas.js';
 import { vipPollOnce } from './lib/sepay.js';
 
 const app = express();
@@ -68,6 +69,7 @@ app.use('/api', analyzeRoutes);
 app.use('/api', promptsRoutes);
 app.use('/api', filmsRoutes);
 app.use('/api/vip', vipRoutes);
+app.use('/api/canvas', canvasRoutes);
 app.use('/api', genRoutes);
 
 // OpenAI 兼容对外接口（用 sk- 密钥鉴权，转发到上游）
