@@ -7,7 +7,7 @@ import { api } from '../../lib/api.js';
    - Nổi bên phải canvas (đối diện bảng bên trái), trên điện thoại thành drawer
      từ phải với nền mờ, bấm nền mờ / X / Escape để đóng.
    - BẮT BUỘC xác nhận trước khi chạy: bấm "Chạy" chỉ mở hộp xác nhận nội tuyến;
-     chỉ khi bấm "Chạy ngay" thì flow mới bắt đầu (điểm bị trừ khi tạo ảnh/video).
+     chỉ khi bấm "Chạy ngay" thì flow mới bắt đầu.
    - Flow: tạo phim → viết kịch bản → chia cảnh → đưa cảnh lên canvas thành nút
      video (nối tiếp nhau) → tạo toàn bộ (ảnh rồi video từng cảnh) → poll mỗi 5s,
      cảnh nào có video thì điền media vào nút canvas tương ứng → ghép thành phim.
@@ -64,7 +64,6 @@ export default function CanvasAgentPanel({
   const filmIdRef = useRef(null);
   const appliedMediaRef = useRef(new Set()); // sceneId đã điền media vào nút
 
-  const estimate = shots * (5 + 10 + 2 * duration);
   filmIdRef.current = filmId;
 
   // Escape đóng panel
@@ -387,17 +386,17 @@ export default function CanvasAgentPanel({
             </div>
           </div>
 
-          {/* Ước tính điểm */}
+          {/* Số cảnh sẽ tạo */}
           <p className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-[13px] text-mist-200">
-            Ước tính: <span className="font-semibold text-white">{estimate} điểm</span>
-            <span className="text-mist-400"> ({shots} cảnh × {5 + 10 + 2 * duration} điểm)</span>
+            Sẽ tạo <span className="font-semibold text-white">{shots} cảnh</span>
+            <span className="text-mist-400"> · {duration}s mỗi cảnh</span>
           </p>
 
           {/* Hộp xác nhận nội tuyến (bắt buộc trước khi chạy) */}
           {confirmOpen && !running && (
             <div className="space-y-2.5 rounded-xl border border-amber-400/30 bg-amber-400/[0.07] px-3 py-3">
               <p className="text-[13px] leading-relaxed text-mist-100">
-                Sẽ dùng khoảng <span className="font-semibold text-white">{estimate} điểm</span> (ảnh 5 + video 10+2×thời lượng mỗi cảnh). Chạy?
+                Sẽ tạo {shots} cảnh ({duration}s mỗi cảnh). Chạy?
               </p>
               <div className="flex gap-2">
                 <button
